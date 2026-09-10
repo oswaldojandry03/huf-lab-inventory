@@ -18,7 +18,7 @@ header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 4px solid #e30613; /* Rojo Huf */
+    border-bottom: 4px solid #e30613;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
     position: sticky;
     top: 0;
@@ -121,7 +121,7 @@ header {
     margin: 0 auto;
 }
 
-.barra-busqueda input {
+.barra-busqueda input, .barra-busqueda select {
     width: 80%;
     padding: 10px 15px;
     border-radius: 6px;
@@ -131,12 +131,12 @@ header {
     font-size: 14px;
 }
 
-.barra-busqueda input:focus {
+.barra-busqueda input:focus, .barra-busqueda select:focus {
     outline: none;
     border-color: #e30613;
 }
 
-/* BOTÓN HUF GENÉRICO */
+/* BOTONES HUF */
 .btn-huf {
     background-color: #e30613;
     color: white;
@@ -241,7 +241,6 @@ header {
     word-break: break-word;
 }
 
-/* BÚSQUEDA HIGHLIGHT */
 .cajon.resaltado, .card-material.resaltado {
     border: 3px solid #2ecc71 !important;
     background-color: #e8f8f0 !important;
@@ -250,7 +249,7 @@ header {
     transition: all 0.3s ease;
 }
 
-/* TARJETAS DE LOCKERS */
+/* LOCKERS */
 .grid-lockers-tarjetas {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -285,7 +284,6 @@ header {
     color: #6c757d;
 }
 
-/* LISTA DE ESTANTES EN MODAL LOCKER */
 .modal-ancho {
     max-width: 800px !important;
 }
@@ -373,7 +371,7 @@ header {
     padding: 2px 5px;
 }
 
-/* SECCIÓN TICKETS NACHO */
+/* TICKETS Y CATÁLOGO */
 .seccion-tickets-nacho {
     background-color: #ffffff;
     border: 1px solid #e9ecef;
@@ -428,7 +426,6 @@ header {
     margin-bottom: 3px;
 }
 
-/* CATÁLOGO NACHO */
 .catalogo-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -454,12 +451,12 @@ header {
 .modal {
     display: none;
     position: fixed;
-    z-index: 100;
+    z-index: 9999;
     left: 0;
     top: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0,0,0,0.5);
+    background-color: rgba(0,0,0,0.55);
     backdrop-filter: blur(2px);
 }
 
@@ -497,7 +494,7 @@ header {
 
 .form-group { margin-bottom: 15px; }
 .form-group label { display: block; margin-bottom: 5px; font-size: 13px; color: #495057; font-weight: 600; }
-.form-group input, .form-group textarea {
+.form-group input, .form-group textarea, .form-group select {
     width: 100%;
     padding: 8px 12px;
     border-radius: 5px;
@@ -521,17 +518,7 @@ header {
     box-shadow: 0 10px 30px rgba(0,0,0,0.5);
 }
 
-/* RESPONSIVO */
-@media (max-width: 1024px) {
-    .gabinete-8x8 { grid-template-columns: repeat(4, 1fr); }
-    .gabinete-6x10 { grid-template-columns: repeat(3, 1fr); }
-}
-
-/* =============================================================
-   ESTILOS PARA EDICIÓN DE MATERIALES (TOOLING)
-   ============================================================= */
-
-/* Contenedor de acciones rápidas en la tarjeta */
+/* EDICIÓN TOOLING Y HUF MODALES */
 .acciones-admin-material {
     display: flex;
     gap: 8px;
@@ -581,18 +568,23 @@ header {
     border-color: #e03131;
 }
 
-/* Modal personalizado Huf */
 .modal-huf-diseno {
-    max-width: 400px;
-    border-radius: 12px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    max-width: 420px;
+    border-radius: 10px;
     overflow: hidden;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
     padding: 0;
     border: none;
+    background-color: #ffffff;
 }
 
 .modal-header-huf {
-    background-color: #003366;
+    background-color: #b30000;
     color: #ffffff;
     padding: 16px 20px;
     display: flex;
@@ -603,30 +595,23 @@ header {
 .modal-header-huf h3 {
     margin: 0;
     font-size: 16px;
-    font-weight: 600;
+    font-weight: 700;
 }
 
 .modal-body-huf {
-    padding: 20px;
-    background-color: #ffffff;
+    padding: 22px 20px;
 }
 
 .subtitulo-material {
-    font-size: 13px;
-    color: #495057;
+    font-size: 14px;
+    color: #333333;
     margin-bottom: 16px;
+    line-height: 1.4;
 }
 
 .texto-destacado-huf {
-    color: #003366;
-}
-
-.form-group-huf label {
-    display: block;
-    font-size: 12px;
-    font-weight: 600;
-    color: #343a40;
-    margin-bottom: 6px;
+    color: #b30000;
+    font-weight: 700;
 }
 
 .input-con-unidad {
@@ -665,109 +650,6 @@ header {
     margin-top: 20px;
 }
 
-.btn-huf-cancelar {
-    background-color: #e9ecef;
-    color: #495057;
-    border: none;
-    padding: 8px 14px;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.btn-huf-cancelar:hover {
-    background-color: #dee2e6;
-}
-
-.btn-huf-guardar {
-    background-color: #003366;
-    color: #ffffff;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.btn-huf-guardar:hover {
-    background-color: #002244;
-}
-
-/* =============================================================
-   CORRECCIÓN DE MODALES Y TEMA ROJO (HUF MÉXICO)
-   ============================================================= */
-
-/* Centrado global de modales */
-.modal {
-    display: none;
-    position: fixed;
-    z-index: 9999;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.55);
-    backdrop-filter: blur(2px);
-}
-
-/* Modal alineado al centro exacto */
-.modal-huf-diseno {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 90%;
-    max-width: 420px;
-    border-radius: 10px;
-    overflow: hidden;
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
-    padding: 0;
-    border: none;
-    background-color: #ffffff;
-}
-
-/* Encabezado en color rojo del tema */
-.modal-header-huf {
-    background-color: #b30000; /* Rojo institucional Huf */
-    color: #ffffff;
-    padding: 16px 20px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.modal-header-huf h3 {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 700;
-}
-
-.modal-body-huf {
-    padding: 22px 20px;
-}
-
-.subtitulo-material {
-    font-size: 14px;
-    color: #333333;
-    margin-bottom: 16px;
-    line-height: 1.4;
-}
-
-.texto-destacado-huf {
-    color: #b30000;
-    font-weight: 700;
-}
-
-.acciones-modal-huf {
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    margin-top: 20px;
-}
-
-/* Botones con estilo uniforme */
 .btn-huf-guardar {
     background-color: #b30000;
     color: #ffffff;
@@ -814,7 +696,6 @@ header {
     background-color: #9a0007;
 }
 
-/* Lista de resultados dentro del modal de Lockers */
 .lista-resultados-lockers {
     max-height: 320px;
     overflow-y: auto;
@@ -826,7 +707,7 @@ header {
 
 .item-resultado-locker {
     background-color: #f8f9fa;
-    border-left: 4px solid #b30000; /* Borde lateral rojo Huf */
+    border-left: 4px solid #b30000;
     border-radius: 6px;
     padding: 12px;
     display: flex;
@@ -864,7 +745,7 @@ header {
     padding: 20px 0;
 }
 
-/* ESTADOS DE STOCK PARA REABASTECIMIENTO Y SOLICITUDES */
+/* STOCK BADGES */
 .card-material.stock-bajo {
     border-left: 5px solid #f39c12 !important;
     background-color: #fef9e7 !important;
@@ -887,26 +768,7 @@ header {
 .badge-stock.low { background-color: #f39c12; color: white; }
 .badge-stock.out { background-color: #e74c3c; color: white; }
 
-/* PANELS DE FILTROS ACUMULABLES CON TAGS REMOVIBLES */
-.panel-filtros-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 10px;
-}
-
-.tag-filtro {
-    background-color: #e30613;
-    color: white;
-    padding: 4px 10px;
-    border-radius: 15px;
-    font-size: 12px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.tag-filtro span {
-    cursor: pointer;
-    font-weight: bold;
+@media (max-width: 1024px) {
+    .gabinete-8x8 { grid-template-columns: repeat(4, 1fr); }
+    .gabinete-6x10 { grid-template-columns: repeat(3, 1fr); }
 }

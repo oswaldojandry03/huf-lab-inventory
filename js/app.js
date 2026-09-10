@@ -1,8 +1,6 @@
 console.log("Sistema del Laboratorio Huf México Inicializado con Firebase");
 
-// =============================================================
-// CONFIGURACIÓN E INICIALIZACIÓN DE FIREBASE
-// =============================================================
+// CONFIGURACIÓN FIREBASE
 const firebaseConfig = {
   apiKey: "AIzaSyCzOL802-zVPt96gVdA4Rym0qBQyMc1crQ",
   authDomain: "laboratorio-huf.firebaseapp.com",
@@ -13,7 +11,6 @@ const firebaseConfig = {
   measurementId: "G-H6W5VYSQ1D"
 };
 
-// Inicializar Firebase
 if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
@@ -21,16 +18,14 @@ if (!firebase.apps.length) {
 var db = firebase.firestore();
 var auth = firebase.auth();
 
-// =============================================================
-// ESTRUCTURAS DE DATOS LOCALES
-// =============================================================
+// ESTRUCTURAS LOCALES
 let inventarioGabinetes = {};
 let inventarioLockers = {};
+let listaFixturesGlobales = [];
 let listaNacho = [];
 let listaTickets = [];
 let listaUsuariosFirebase = {};
 
-// USUARIO ACTUAL Y REGISTRO MASTER (AUTOLOGIN COMO SUPER_ADMIN)
 let usuarioActual = "Jandry";
 let rolActual = "SUPER_ADMIN";
 
@@ -41,9 +36,6 @@ let chartBusquedasInstancia = null;
 let chartMaterialesInstancia = null;
 let temporalPiezaDual = null;
 
-// =============================================================
-// HELPER: NOTIFICACIÓN IN-APP EN REEMPLAZO DE ALERT()
-// =============================================================
 function mostrarAlertaInApp(mensaje, titulo = "System Notification") {
     const elTitulo = document.getElementById('notif-titulo');
     const elMensaje = document.getElementById('notif-mensaje');
@@ -52,14 +44,9 @@ function mostrarAlertaInApp(mensaje, titulo = "System Notification") {
     abrirModal('modal-notificacion-inapp');
 }
 
-// =============================================================
-// INICIALIZACIÓN Y DESBLOQUEO INMEDIATO DE LA INTERFAZ
-// =============================================================
 document.addEventListener("DOMContentLoaded", () => {
     generarGabinetes();
     escucharFirestore();
-    
-    // FORZAR ACCESO INMEDIATO SIN BLOQUEOS
     activarInterfazSuperAdmin();
 });
 
@@ -99,16 +86,14 @@ function activarInterfazSuperAdmin() {
 
     setTimeout(() => {
         inicializarGraficas();
-        if (typeof cargarFixturesGlobales === "function") cargarFixturesGlobales();
+        cargarFixturesGlobales();
     }, 300);
 }
 
-// OMITIR VERIFICACIONES DE FIREBASE AUTH PARA PRUEBAS
 auth.onAuthStateChanged((user) => {
     activarInterfazSuperAdmin();
 });
 
-// AUTO-REGISTRO DE USUARIOS (ESTADO PENDIENTE)
 async function registrarUsuarioForm(event) {
     if (event) event.preventDefault();
     const email = document.getElementById('reg-email').value.trim();
@@ -137,14 +122,12 @@ async function registrarUsuarioForm(event) {
 }
 
 function escucharFirestore() {
-    // 1. Usuarios (Legacy Admin Panel)
     db.collection("usuarios").onSnapshot((snapshot) => {
         listaUsuariosFirebase = {};
         snapshot.forEach((doc) => {
             listaUsuariosFirebase[doc.id] = doc.data();
         });
         
-        // Crear automáticamente a Jandry (Master) y Nacho (Admin) si no existen
         if (!listaUsuariosFirebase["Jandry"]) {
             db.collection("usuarios").doc("Jandry").set({ pass: "Jandrik.21", rol: "SUPER_ADMIN" });
         }
@@ -155,7 +138,6 @@ function escucharFirestore() {
         renderizarTablaUsuarios();
     });
 
-    // 2. Gabinetes
     db.collection("gabinetes").onSnapshot((snapshot) => {
         inventarioGabinetes = {};
         snapshot.forEach((doc) => {
@@ -164,7 +146,6 @@ function escucharFirestore() {
         generarGabinetes();
     });
 
-    // 3. Lockers
     db.collection("lockers").onSnapshot((snapshot) => {
         inventarioLockers = {};
         snapshot.forEach((doc) => {
@@ -173,7 +154,14 @@ function escucharFirestore() {
         generarTarjetasLockers();
     });
 
-    // 4. Catalogo Consumibles
+    db.collection("fixtures").onSnapshot((snapshot) => {
+        listaFixturesGlobales = [];
+        snapshot.forEach((doc) => {
+            listaFixturesGlobales.push({ firestoreId: doc.id, ...doc.data() });
+        });
+        cargarFixturesGlobales();
+    });
+
     db.collection("catalogo_nacho").onSnapshot((snapshot) => {
         listaNacho = [];
         snapshot.forEach((doc) => {
@@ -182,7 +170,6 @@ function escucharFirestore() {
         renderizarCatalogoNacho();
     });
 
-    // 5. Tickets Solicitados
     db.collection("tickets").orderBy("fechaSort", "desc").onSnapshot((snapshot) => {
         listaTickets = [];
         snapshot.forEach((doc) => {
@@ -192,7 +179,6 @@ function escucharFirestore() {
     });
 }
 
-// NAVEGACIÓN POR PESTAÑAS
 function cambiarPestana(event, idTab) {
     document.querySelectorAll('#contenido-protegido .tab-content').forEach(tab => tab.classList.remove('activo'));
     document.querySelectorAll('.btn-tab').forEach(btn => btn.classList.remove('activo'));
@@ -202,7 +188,16 @@ function cambiarPestana(event, idTab) {
     if (event && event.currentTarget) event.currentTarget.classList.add('activo');
 }
 
-// CONTROL DE MODALES
+function navegarAModulo(idTab) {
+    cambiarPestana(null, idTab);
+    const btns = document.querySelectorAll('.btn-tab');
+    btns.forEach(b => {
+        if (b.getAttribute('onclick')?.includes(idTab)) {
+            b.classList.add('activo');
+        }
+    });
+}
+
 function abrirModal(id) { 
     const el = document.getElementById(id);
     if (el) el.style.display = 'block'; 
@@ -213,7 +208,6 @@ function cerrarModal(id) {
     if (el) el.style.display = 'none'; 
 }
 
-// INICIAR SESIÓN Y GESTIÓN DE ROLES (MANUAL)
 function iniciarSesion(event) {
     if (event) event.preventDefault();
     const uInput = document.getElementById('usuario');
@@ -264,7 +258,6 @@ function cerrarSesion() {
     cerrarSesionUI();
 }
 
-// REGISTRO DE AUDITORÍA
 async function registrarAuditLog(action, description) {
     if (!usuarioActual) return;
     try {
@@ -280,7 +273,6 @@ async function registrarAuditLog(action, description) {
     }
 }
 
-// GESTIÓN EXCLUSIVA DE USUARIOS
 async function crearNuevoUsuario(event) {
     if (event) event.preventDefault();
     if (rolActual !== "SUPER_ADMIN") return;
@@ -331,12 +323,12 @@ async function eliminarUsuario(nombre) {
     }
 }
 
-// RESPALDO Y RESTAURACIÓN
 function exportarDatos() {
     if (rolActual !== "SUPER_ADMIN") return;
     const dataBackup = {
         inv_gabinetes: inventarioGabinetes,
         inv_lockers_v2: inventarioLockers,
+        inv_fixtures: listaFixturesGlobales,
         inv_nacho: listaNacho,
         inv_tickets: listaTickets
     };
@@ -375,9 +367,7 @@ function importarDatos(event) {
     reader.readAsText(file);
 }
 
-// -------------------------------------------------------------
 // GABINETES Y CAJONES
-// -------------------------------------------------------------
 function generarGabinetes() {
     const gab1 = document.getElementById('gabinete-1');
     if (gab1) {
@@ -473,9 +463,7 @@ function ejecutarBusqueda(event) {
     }
 }
 
-// -------------------------------------------------------------
 // LOCKERS (A - G)
-// -------------------------------------------------------------
 function generarTarjetasLockers() {
     const contenedor = document.getElementById('contenedor-lockers');
     if (!contenedor) return;
@@ -689,9 +677,80 @@ function buscarLockers(event) {
     abrirModal('modal-resultados-lockers');
 }
 
-// -------------------------------------------------------------
+// FIXTURES GLOBAL DIRECTORY
+function cargarFixturesGlobales() {
+    const contenedor = document.getElementById('contenedor-fixtures-jerarquico');
+    const selectCliente = document.getElementById('filtro-cliente-fixture');
+    if (!contenedor) return;
+
+    contenedor.innerHTML = '';
+    
+    // Rellenar clientes dinámicos en el selector
+    if (selectCliente) {
+        const clienteSeleccionado = selectCliente.value;
+        const clientesSet = new Set();
+        listaFixturesGlobales.forEach(f => { if (f.client) clientesSet.add(f.client); });
+
+        selectCliente.innerHTML = '<option value="">All Clients</option>';
+        clientesSet.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c;
+            opt.textContent = c;
+            selectCliente.appendChild(opt);
+        });
+        selectCliente.value = clienteSeleccionado;
+    }
+
+    filtrarFixturesGlobales();
+}
+
+function filtrarFixturesGlobales() {
+    const contenedor = document.getElementById('contenedor-fixtures-jerarquico');
+    const busqueda = document.getElementById('buscar-fixtures')?.value.toLowerCase().trim() || '';
+    const clienteFiltro = document.getElementById('filtro-cliente-fixture')?.value || '';
+
+    if (!contenedor) return;
+    contenedor.innerHTML = '';
+
+    const filtrados = listaFixturesGlobales.filter(f => {
+        const cumpleTexto = (
+            f.nombre.toLowerCase().includes(busqueda) ||
+            (f.projectNumber && f.projectNumber.toLowerCase().includes(busqueda)) ||
+            (f.desc && f.desc.toLowerCase().includes(busqueda))
+        );
+        const cumpleCliente = clienteFiltro === '' || f.client === clienteFiltro;
+        return cumpleTexto && cumpleCliente;
+    });
+
+    if (filtrados.length === 0) {
+        contenedor.innerHTML = '<p style="color: #6c757d; font-size: 14px; grid-column: 1/-1; text-align: center;">No registered fixtures matching criteria.</p>';
+        return;
+    }
+
+    filtrados.forEach(f => {
+        const card = document.createElement('div');
+        card.className = 'card-material';
+        const imgTag = f.foto ? `<img src="${f.foto}" class="img-preview-thumb" style="width: 100%; height: 120px; object-fit: cover; margin-bottom: 10px;" onclick="ampliarFoto('${f.foto}')">` : '';
+        
+        card.innerHTML = `
+            <div>
+                ${imgTag}
+                <div style="display: flex; justify-content: space-between; align-items: start;">
+                    <h4>${f.nombre}</h4>
+                    <span class="badge-stock ok">${f.client || 'General'}</span>
+                </div>
+                <p><strong>Project:</strong> ${f.projectNumber || 'N/A'}</p>
+                <p>${f.desc || 'No description provided.'}</p>
+            </div>
+            <div style="margin-top: 10px; border-top: 1px solid #e9ecef; padding-top: 8px;">
+                <p style="font-size: 11px; font-weight: bold; color: #e30613;">Location: Locker ${f.lockerLocation || f.letra + '-' + f.divNum}</p>
+            </div>
+        `;
+        contenedor.appendChild(card);
+    });
+}
+
 // CONSUMIBLES Y TICKETS
-// -------------------------------------------------------------
 function renderizarCatalogoNacho() {
     const contenedor = document.getElementById('catalogo-nacho');
     if (!contenedor) return;
@@ -884,9 +943,7 @@ async function guardarMaterialNacho(event) {
     document.getElementById('nacho-mat-cant').value = '';
 }
 
-// -------------------------------------------------------------
-// DASHBOARD DE ANALÍTICAS (CHART.JS)
-// -------------------------------------------------------------
+// DASHBOARD DE ANALÍTICAS
 function inicializarGraficas() {
     const elBusquedas = document.getElementById('chartBusquedas');
     const elMateriales = document.getElementById('chartMateriales');
@@ -925,9 +982,7 @@ function inicializarGraficas() {
     }
 }
 
-// -------------------------------------------------------------
 // AUDITORÍA MENSUAL ALEATORIA
-// -------------------------------------------------------------
 async function generarSorteoAnualAuditoria() {
     const usersSnapshot = await db.collection("users").get();
     let usuarios = [];

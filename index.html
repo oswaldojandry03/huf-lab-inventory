@@ -6,19 +6,14 @@
     <title>Laboratory Inventory - Huf México</title>
     <link rel="stylesheet" href="css/estilo.css">
     
-    <!-- Cargar Chart.js para analíticas -->
+    <!-- Chart.js para analíticas -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Firebase SDK v8 -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 </head>
 <body>
 
     <!-- HEADER CON LOGO FIJO PERMANENTE HUF MEXICO -->
     <header>
         <div class="header-brand">
-            <!-- SVG del Logo Corporativo Huf México Fijo -->
             <svg width="120" height="30" viewBox="0 0 200 50" fill="none" xmlns="http://www.w3.org/2000/svg" style="pointer-events: none; user-select: none;">
                 <rect width="200" height="50" rx="4" fill="#1A1D20"/>
                 <text x="15" y="35" font-family="'Segoe UI', sans-serif" font-weight="900" font-size="28" fill="#E30613">HUF</text>
@@ -131,12 +126,12 @@
                 <h3>Global Fixture Directory</h3>
                 <div class="barra-busqueda">
                     <input type="text" id="buscar-fixtures" placeholder="Search by Name, Project Number, Description..." onkeyup="filtrarFixturesGlobales()">
-                    <select id="filtro-cliente-fixture" onchange="filtrarFixturesGlobales()" style="padding: 10px; border-radius: 6px; border: 1px solid #ced4da;">
+                    <select id="filtro-cliente-fixture" onchange="filtrarFixturesGlobales()">
                         <option value="">All Clients</option>
                     </select>
                 </div>
             </div>
-            <div id="contenedor-fixtures-jerarquico"></div>
+            <div id="contenedor-fixtures-jerarquico" class="catalogo-grid"></div>
         </main>
 
         <!-- PESTAÑA: MATERIALES Y SOLICITUDES -->
@@ -236,7 +231,7 @@
         </div>
     </div>
 
-    <!-- MODAL GESTIÓN DE USUARIOS (SOLO MASTER) -->
+    <!-- MODAL GESTIÓN DE USUARIOS -->
     <div id="modal-gestion-usuarios" class="modal">
         <div class="modal-contenido modal-ancho">
             <span class="cerrar" onclick="cerrarModal('modal-gestion-usuarios')">&times;</span>
@@ -255,7 +250,7 @@
                     </div>
                     <div class="form-group" style="margin: 0;">
                         <label>Rol:</label>
-                        <select id="nuevo-user-rol" style="width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #ced4da;">
+                        <select id="nuevo-user-rol">
                             <option value="USUARIO">Usuario (Tickets/Búsquedas)</option>
                             <option value="ADMIN">Administrador (Modificar Inventario)</option>
                         </select>
@@ -265,13 +260,11 @@
             </form>
 
             <h4 style="margin-bottom: 10px; font-size: 14px;">Usuarios Registrados en Sistema</h4>
-            <div id="lista-usuarios-sistema" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto;">
-                <!-- Carga dinámica -->
-            </div>
+            <div id="lista-usuarios-sistema" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto;"></div>
         </div>
     </div>
 
-    <!-- MODAL EDITAR CAJÓN (GABINETES) -->
+    <!-- MODAL EDITAR CAJÓN -->
     <div id="modal-cajon" class="modal">
         <div class="modal-contenido">
             <span class="cerrar" onclick="cerrarModal('modal-cajon')">&times;</span>
@@ -292,7 +285,7 @@
         </div>
     </div>
 
-    <!-- MODAL DETALLE DE UN LOCKER COMPLETO -->
+    <!-- MODAL DETALLE LOCKER -->
     <div id="modal-locker-detalle" class="modal">
         <div class="modal-contenido modal-ancho">
             <span class="cerrar" onclick="cerrarModal('modal-locker-detalle')">&times;</span>
@@ -301,7 +294,7 @@
         </div>
     </div>
 
-    <!-- MODAL AGREGAR / EDITAR PIEZA EN UN ESTANTE -->
+    <!-- MODAL AGREGAR / EDITAR PIEZA EN LOCKER -->
     <div id="modal-editar-pieza" class="modal">
         <div class="modal-contenido">
             <span class="cerrar" onclick="cerrarModal('modal-editar-pieza')">&times;</span>
@@ -312,8 +305,23 @@
                 <input type="hidden" id="pieza-index-id">
                 
                 <div class="form-group">
+                    <label>Tipo de Objeto:</label>
+                    <div style="display: flex; gap: 15px; margin-top: 5px;">
+                        <label style="font-weight: normal;"><input type="radio" name="tipo-objeto" value="Fixture" checked> Fixture</label>
+                        <label style="font-weight: normal;"><input type="radio" name="tipo-objeto" value="Auxiliary"> Auxiliar</label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Cliente:</label>
+                    <input type="text" id="input-pieza-cliente" placeholder="Ej: BMW, Volkswagen, Audi...">
+                </div>
+                <div class="form-group">
                     <label>Nombre del Fixture / Equipo:</label>
                     <input type="text" id="input-pieza-nombre" placeholder="Ej: Fixture F-01 Pruebas" required>
+                </div>
+                <div class="form-group">
+                    <label>Número de Proyecto:</label>
+                    <input type="text" id="input-pieza-proyecto" placeholder="Ej: PRJ-2026-X">
                 </div>
                 <div class="form-group">
                     <label>Descripción / Observaciones:</label>
@@ -368,7 +376,7 @@
         </div>
     </div>
 
-    <!-- MODAL AGREGAR MATERIAL (ADMIN) -->
+    <!-- MODAL AGREGAR MATERIAL -->
     <div id="modal-nuevo-material-nacho" class="modal">
         <div class="modal-contenido">
             <span class="cerrar" onclick="cerrarModal('modal-nuevo-material-nacho')">&times;</span>
@@ -452,7 +460,7 @@
         </div>
     </div>
 
-    <!-- MODAL IN-APP ALERT/NOTIFICATION -->
+    <!-- MODAL NOTIFICACIÓN IN-APP -->
     <div id="modal-notificacion-inapp" class="modal">
         <div class="modal-content modal-huf-diseno" style="max-width: 350px;">
             <div class="modal-header-huf">
@@ -483,8 +491,9 @@
         </div>
     </div>
 
-    <!-- LIBRERÍAS Y SCRIPTS -->
+    <!-- CARGA UNIFICADA FIREBASE SDK v10 COMPAT -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <script src="js/app.js"></script>
 </body>
