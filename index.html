@@ -3,29 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Laboratorio Inventario - Huf México</title>
+    <title>Laboratory Inventory - Huf México</title>
     <link rel="stylesheet" href="css/estilo.css">
+    
+    <!-- Cargar Chart.js para analíticas -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
-    <!-- ENCABEZADO ESTILO HUF -->
+    <!-- HEADER CON LOGO FIJO PERMANENTE HUF MEXICO -->
     <header>
         <div class="header-brand">
-            <h1>Laboratorio Inventario</h1>
+            <!-- SVG del Logo Corporativo Huf México Fijo -->
+            <svg width="120" height="30" viewBox="0 0 200 50" fill="none" xmlns="http://www.w3.org/2000/svg" style="pointer-events: none; user-select: none;">
+                <rect width="200" height="50" rx="4" fill="#1A1D20"/>
+                <text x="15" y="35" font-family="'Segoe UI', sans-serif" font-weight="900" font-size="28" fill="#E30613">HUF</text>
+                <text x="85" y="32" font-family="'Segoe UI', sans-serif" font-weight="600" font-size="14" fill="#FFFFFF">MEXICO</text>
+            </svg>
+            <h1>Laboratory Inventory</h1>
         </div>
         
         <nav class="nav-tabs" id="nav-tabs-container" style="display: none;">
-            <button class="btn-tab activo" onclick="cambiarPestana(event, 'tab-gabinetes')">Gabinetes</button>
-            <button class="btn-tab" onclick="cambiarPestana(event, 'tab-lockers')">Lockers / Fixtures</button>
-            <button class="btn-tab" onclick="cambiarPestana(event, 'tab-solicitudes')">Materiales</button>
+            <button class="btn-tab activo" onclick="cambiarPestana(event, 'tab-landing')">Home</button>
+            <button class="btn-tab" onclick="cambiarPestana(event, 'tab-gabinetes')">Inventory & Lockers</button>
+            <button class="btn-tab" onclick="cambiarPestana(event, 'tab-fixtures')">Fixtures List</button>
+            <button class="btn-tab" onclick="cambiarPestana(event, 'tab-solicitudes')">Materials & Tickets</button>
+            <button class="btn-tab" onclick="cambiarPestana(event, 'tab-analytics')">Analytics</button>
+            <button class="btn-tab" id="tab-btn-auditoria" onclick="cambiarPestana(event, 'tab-auditoria')" style="display: none;">Monthly Audit</button>
         </nav>
 
         <div class="usuario-panel">
-            <span id="usuario-login">Invitado</span>
-            <button class="btn-login" id="btn-login-trigger" onclick="abrirModal('modal-login')">Ingresar</button>
-            <button class="btn-login" id="btn-logout-trigger" style="display: none;" onclick="cerrarSesion()">Cerrar Sesión</button>
+            <span id="usuario-login">Guest</span>
+            <button class="btn-login" id="btn-login-trigger" onclick="abrirModal('modal-login')">Login</button>
+            <button class="btn-login" id="btn-register-trigger" onclick="abrirModal('modal-register')">Register</button>
+            <button class="btn-login" id="btn-logout-trigger" style="display: none;" onclick="cerrarSesion()">Logout</button>
 
-            <!-- OPCIONES EXCLUSIVAS DE MASTER (JANDRY) -->
+            <!-- OPCIONES EXCLUSIVAS DE MASTER -->
             <div id="panel-master-acciones" style="display: none; gap: 8px;">
                 <button class="btn-huf-secundario" onclick="abrirModal('modal-gestion-usuarios')" title="Gestionar Usuarios">+ Usuarios</button>
                 <button class="btn-huf-secundario" onclick="exportarDatos()" title="Exportar Backup">Exportar</button>
@@ -47,8 +60,26 @@
     <!-- CONTENIDO PRINCIPAL (SOLO VISIBLE CON SESIÓN INICIADA) -->
     <div id="contenido-protegido" style="display: none;">
 
-        <!-- PESTAÑA 1: GABINETES Y CAJONES -->
-        <main id="tab-gabinetes" class="tab-content activo">
+        <!-- PANTALLA INICIAL POST-LOGIN (LANDING MODULAR) -->
+        <main id="tab-landing" class="tab-content activo">
+            <div style="text-align: center; margin-bottom: 30px;">
+                <h2>Laboratory Management System</h2>
+                <p style="color: #6c757d;">Select a module to continue</p>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; max-width: 800px; margin: 0 auto;">
+                <div class="card-locker-selector" onclick="navegarAModulo('tab-gabinetes')">
+                    <h3>Inventory</h3>
+                    <p>Manage Lockers, Cabinets, and Tooling Stock</p>
+                </div>
+                <div class="card-locker-selector" onclick="navegarAModulo('tab-fixtures')">
+                    <h3>Fixtures</h3>
+                    <p>Access Global Fixture Directory by Client & Project</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- PESTAÑA: GABINETES Y LOCKERS -->
+        <main id="tab-gabinetes" class="tab-content">
             <section class="buscador-container">
                 <h3>Buscador General de Componentes</h3>
                 <form class="barra-busqueda" onsubmit="ejecutarBusqueda(event)">
@@ -78,11 +109,8 @@
                     <div id="gab3-der" class="col-grandes"></div>
                 </div>
             </div>
-        </main>
 
-        <!-- PESTAÑA 2: LOCKERS -->
-        <main id="tab-lockers" class="tab-content">
-            <div class="buscador-container">
+            <div class="buscador-container" style="margin-top: 40px;">
                 <h3>Buscador de Fixtures y Equipos en Lockers</h3>
                 <form class="barra-busqueda" onsubmit="buscarLockers(event)">
                     <input type="text" id="buscar-locker" placeholder="Ej: Fixture F-01, Base de Pruebas...">
@@ -93,7 +121,21 @@
             <div class="grid-lockers-tarjetas" id="contenedor-lockers"></div>
         </main>
 
-        <!-- PESTAÑA 3: MATERIALES Y SOLICITUDES -->
+        <!-- PESTAÑA: FIXTURES GLOBAL LIST -->
+        <main id="tab-fixtures" class="tab-content">
+            <div class="buscador-container">
+                <h3>Global Fixture Directory</h3>
+                <div class="barra-busqueda">
+                    <input type="text" id="buscar-fixtures" placeholder="Search by Name, Project Number, Description..." onkeyup="filtrarFixturesGlobales()">
+                    <select id="filtro-cliente-fixture" onchange="filtrarFixturesGlobales()" style="padding: 10px; border-radius: 6px; border: 1px solid #ced4da;">
+                        <option value="">All Clients</option>
+                    </select>
+                </div>
+            </div>
+            <div id="contenedor-fixtures-jerarquico"></div>
+        </main>
+
+        <!-- PESTAÑA: MATERIALES Y SOLICITUDES -->
         <main id="tab-solicitudes" class="tab-content">
             <section class="seccion-tickets-nacho">
                 <div class="header-solicitudes">
@@ -118,6 +160,32 @@
 
             <div class="catalogo-grid" id="catalogo-nacho"></div>
         </main>
+
+        <!-- PESTAÑA: ANALYTICS & DASHBOARD -->
+        <main id="tab-analytics" class="tab-content">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div class="gabinete-wrapper">
+                    <h2>Search Trend Chart</h2>
+                    <canvas id="chartBusquedas"></canvas>
+                </div>
+                <div class="gabinete-wrapper">
+                    <h2>Top Requested Materials Chart</h2>
+                    <canvas id="chartMateriales"></canvas>
+                </div>
+            </div>
+        </main>
+
+        <!-- PESTAÑA: AUDITORÍA MENSUAL ALEATORIA (ADMINS) -->
+        <main id="tab-auditoria" class="tab-content">
+            <div class="gabinete-wrapper">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h2>Monthly Audit Log & Pair Assignment</h2>
+                    <button class="btn-huf" onclick="generarSorteoAnualAuditoria()">Generate Annual Pairs</button>
+                </div>
+                <div id="contenedor-parejas-auditoria" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px;"></div>
+            </div>
+        </main>
+
     </div>
 
     <!-- MODAL LOGIN -->
@@ -127,8 +195,8 @@
             <h2 class="modal-titulo-huf">Iniciar Sesión</h2>
             <form onsubmit="iniciarSesion(event)">
                 <div class="form-group">
-                    <label>Usuario:</label>
-                    <input type="text" id="usuario" placeholder="Ej: Jandry, Nacho..." required>
+                    <label>Usuario / Email:</label>
+                    <input type="text" id="usuario" placeholder="user@huf-group.com" required>
                 </div>
                 <div class="form-group">
                     <label>Contraseña:</label>
@@ -140,7 +208,31 @@
         </div>
     </div>
 
-    <!-- MODAL GESTIÓN DE USUARIOS (SOLO MASTER JANDRY) -->
+    <!-- MODAL REGISTRO DE USUARIO -->
+    <div id="modal-register" class="modal">
+        <div class="modal-contenido">
+            <span class="cerrar" onclick="cerrarModal('modal-register')">&times;</span>
+            <h2 class="modal-titulo-huf">Create Account</h2>
+            <form onsubmit="registrarUsuarioForm(event)">
+                <div class="form-group">
+                    <label>Email Address:</label>
+                    <input type="email" id="reg-email" required placeholder="user@huf-group.com">
+                </div>
+                <div class="form-group">
+                    <label>Full Name:</label>
+                    <input type="text" id="reg-nombre" required placeholder="John Doe">
+                </div>
+                <div class="form-group">
+                    <label>Password:</label>
+                    <input type="password" id="reg-password" required minlength="6">
+                </div>
+                <p id="mensaje-error-registro" style="color: #e30613; display: none; font-size: 13px; margin-bottom: 10px;"></p>
+                <button type="submit" class="btn-huf" style="width: 100%;">Register</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL GESTIÓN DE USUARIOS (SOLO MASTER) -->
     <div id="modal-gestion-usuarios" class="modal">
         <div class="modal-contenido modal-ancho">
             <span class="cerrar" onclick="cerrarModal('modal-gestion-usuarios')">&times;</span>
@@ -356,6 +448,38 @@
         </div>
     </div>
 
+    <!-- MODAL IN-APP ALERT/NOTIFICATION -->
+    <div id="modal-notificacion-inapp" class="modal">
+        <div class="modal-content modal-huf-diseno" style="max-width: 350px;">
+            <div class="modal-header-huf">
+                <h3 id="notif-titulo">System Notification</h3>
+            </div>
+            <div class="modal-body-huf" style="text-align: center;">
+                <p id="notif-mensaje" class="subtitulo-material">Message</p>
+                <div class="acciones-modal-huf" style="justify-content: center;">
+                    <button type="button" class="btn-huf-guardar" onclick="cerrarModal('modal-notificacion-inapp')">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL GUARDADO DUAL (INVENTORY + FIXTURE) -->
+    <div id="modal-confirmar-fixture-dual" class="modal">
+        <div class="modal-content modal-huf-diseno">
+            <div class="modal-header-huf">
+                <h3>Dual Save Confirmation</h3>
+            </div>
+            <div class="modal-body-huf">
+                <p class="subtitulo-material">Do you want to save this object to the global Fixtures list as well?</p>
+                <div class="acciones-modal-huf">
+                    <button type="button" class="btn-huf-cancelar" onclick="procesarGuardadoDual(false)">No, Locker Only</button>
+                    <button type="button" class="btn-huf-guardar" onclick="procesarGuardadoDual(true)">Yes, Save to Fixtures</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LIBRERÍAS Y SCRIPTS -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <script src="js/app.js"></script>

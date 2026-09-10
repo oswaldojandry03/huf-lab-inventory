@@ -863,3 +863,50 @@ header {
     font-size: 14px;
     padding: 20px 0;
 }
+
+/* ESTADOS DE STOCK PARA REABASTECIMIENTO Y SOLICITUDES */
+.card-material.stock-bajo {
+    border-left: 5px solid #f39c12 !important;
+    background-color: #fef9e7 !important;
+}
+
+.card-material.stock-agotado {
+    border-left: 5px solid #e74c3c !important;
+    background-color: #fadbd8 !important;
+}
+
+.badge-stock {
+    font-size: 11px;
+    font-weight: bold;
+    padding: 3px 8px;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+.badge-stock.ok { background-color: #2ecc71; color: white; }
+.badge-stock.low { background-color: #f39c12; color: white; }
+.badge-stock.out { background-color: #e74c3c; color: white; }
+
+/* PANELS DE FILTROS ACUMULABLES CON TAGS REMOVIBLES */
+.panel-filtros-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.tag-filtro {
+    background-color: #e30613;
+    color: white;
+    padding: 4px 10px;
+    border-radius: 15px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.tag-filtro span {
+    cursor: pointer;
+    font-weight: bold;
+}
