@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laboratorio Inventario - Huf México</title>
+    <link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+
+    <!-- ENCABEZADO ESTILO HUF -->
+    <header>
+        <div class="header-brand">
+            <h1>Laboratorio Inventario</h1>
+        </div>
+        
+        <nav class="nav-tabs" id="nav-tabs-container" style="display: none;">
+            <button class="btn-tab activo" onclick="cambiarPestana(event, 'tab-gabinetes')">Gabinetes</button>
+            <button class="btn-tab" onclick="cambiarPestana(event, 'tab-lockers')">Lockers / Fixtures</button>
+            <button class="btn-tab" onclick="cambiarPestana(event, 'tab-solicitudes')">Materiales</button>
+        </nav>
+
+        <div class="usuario-panel">
+            <span id="usuario-login">Invitado</span>
+            <button class="btn-login" id="btn-login-trigger" onclick="abrirModal('modal-login')">Ingresar</button>
+            <button class="btn-login" id="btn-logout-trigger" style="display: none;" onclick="cerrarSesion()">Cerrar Sesión</button>
+
+            <!-- OPCIONES EXCLUSIVAS DE MASTER (JANDRY) -->
+            <div id="panel-master-acciones" style="display: none; gap: 8px;">
+                <button class="btn-huf-secundario" onclick="abrirModal('modal-gestion-usuarios')" title="Gestionar Usuarios">+ Usuarios</button>
+                <button class="btn-huf-secundario" onclick="exportarDatos()" title="Exportar Backup">Exportar</button>
+                <button class="btn-huf-secundario" onclick="document.getElementById('importar-file').click()" title="Importar Backup">Importar</button>
+                <input type="file" id="importar-file" style="display:none;" accept=".json" onchange="importarDatos(event)">
+            </div>
+        </div>
+    </header>
+
+    <!-- MENSAJE DE ACCESO RESTRINGIDO (CUANDO NO HAY SESIÓN) -->
+    <div id="bloqueo-pantalla" class="tab-content activo" style="text-align: center; padding-top: 80px;">
+        <div class="buscador-container" style="max-width: 500px; margin: 0 auto; padding: 40px 20px;">
+            <h2 style="color: #e30613; margin-bottom: 15px;">Acceso Restringido</h2>
+            <p style="color: #495057; margin-bottom: 25px;">Por motivos de seguridad del laboratorio, debes iniciar sesión para visualizar o interactuar con el inventario.</p>
+            <button class="btn-huf" onclick="abrirModal('modal-login')">Iniciar Sesión Ahora</button>
+        </div>
+    </div>
+
+    <!-- CONTENIDO PRINCIPAL (SOLO VISIBLE CON SESIÓN INICIADA) -->
+    <div id="contenido-protegido" style="display: none;">
+
+        <!-- PESTAÑA 1: GABINETES Y CAJONES -->
+        <main id="tab-gabinetes" class="tab-content activo">
+            <section class="buscador-container">
+                <h3>Buscador General de Componentes</h3>
+                <form class="barra-busqueda" onsubmit="ejecutarBusqueda(event)">
+                    <input type="text" id="buscar" placeholder="Ej: Tornillo M6, Resistencia 10k, Relevador...">
+                    <button type="submit" class="btn-huf">Buscar</button>
+                </form>
+            </section>
+
+            <!-- GABINETE 1: ELECTRÓNICO (8x8) -->
+            <div class="gabinete-wrapper">
+                <h2>Gabinete 1: Componentes Electrónicos (8 x 8)</h2>
+                <div id="gabinete-1" class="gabinete-8x8"></div>
+            </div>
+
+            <!-- GABINETE 2: TORNILLOS ESTÁNDAR (6x10) -->
+            <div class="gabinete-wrapper">
+                <h2>Gabinete 2: Tornillos Estándar (6 x 10)</h2>
+                <div id="gabinete-2" class="gabinete-6x10"></div>
+            </div>
+
+            <!-- GABINETE 3: ELÉCTRICO ROJO -->
+            <div class="gabinete-wrapper gabinete-rojo-border">
+                <h2 style="color: #e30613;">Gabinete 3: Material Eléctrico (Especial Rojo)</h2>
+                <div class="gabinete-electrico-rojo">
+                    <div id="gab3-izq" class="col-grandes"></div>
+                    <div id="gab3-centro" class="col-centro"></div>
+                    <div id="gab3-der" class="col-grandes"></div>
+                </div>
+            </div>
+        </main>
+
+        <!-- PESTAÑA 2: LOCKERS -->
+        <main id="tab-lockers" class="tab-content">
+            <div class="buscador-container">
+                <h3>Buscador de Fixtures y Equipos en Lockers</h3>
+                <form class="barra-busqueda" onsubmit="buscarLockers(event)">
+                    <input type="text" id="buscar-locker" placeholder="Ej: Fixture F-01, Base de Pruebas...">
+                    <button type="submit" class="btn-huf">Buscar en Lockers</button>
+                </form>
+            </div>
+
+            <div class="grid-lockers-tarjetas" id="contenedor-lockers"></div>
+        </main>
+
+        <!-- PESTAÑA 3: MATERIALES Y SOLICITUDES -->
+        <main id="tab-solicitudes" class="tab-content">
+            <section class="seccion-tickets-nacho">
+                <div class="header-solicitudes">
+                    <h3>Solicitudes / Tickets de Materiales</h3>
+                    <span class="badge-tickets" id="num-tickets-pendientes">0 Pendientes</span>
+                </div>
+                <div id="lista-tickets-contenedor" class="grid-tickets">
+                    <p style="color: #6c757d; font-size: 14px;">No hay tickets pendientes actualmente.</p>
+                </div>
+            </section>
+
+            <div class="buscador-container" style="margin-top: 30px;">
+                <h3>Materiales Disponibles de Tooling</h3>
+                <form class="barra-busqueda" onsubmit="buscarMaterialNacho(event)">
+                    <input type="text" id="buscar-nacho" placeholder="Ej: Cinta aislar, Pegamento, Clemas...">
+                    <button type="submit" class="btn-huf">Buscar Consumible</button>
+                </form>
+                <div id="panel-admin-nacho" style="margin-top: 15px; display: none;">
+                    <button class="btn-huf-secundario" onclick="abrirModal('modal-nuevo-material-nacho')">+ Agregar Nuevo Material a Lista</button>
+                </div>
+            </div>
+
+            <div class="catalogo-grid" id="catalogo-nacho"></div>
+        </main>
+    </div>
+
+    <!-- MODAL LOGIN -->
+    <div id="modal-login" class="modal">
+        <div class="modal-contenido">
+            <span class="cerrar" onclick="cerrarModal('modal-login')">&times;</span>
+            <h2 class="modal-titulo-huf">Iniciar Sesión</h2>
+            <form onsubmit="iniciarSesion(event)">
+                <div class="form-group">
+                    <label>Usuario:</label>
+                    <input type="text" id="usuario" placeholder="Ej: Jandry, Nacho..." required>
+                </div>
+                <div class="form-group">
+                    <label>Contraseña:</label>
+                    <input type="password" id="password" required>
+                </div>
+                <p id="mensaje-error-login" style="color: #e30613; display: none; font-size: 13px; margin-bottom: 10px;"></p>
+                <button type="submit" class="btn-huf" style="width: 100%;">Ingresar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL GESTIÓN DE USUARIOS (SOLO MASTER JANDRY) -->
+    <div id="modal-gestion-usuarios" class="modal">
+        <div class="modal-contenido modal-ancho">
+            <span class="cerrar" onclick="cerrarModal('modal-gestion-usuarios')">&times;</span>
+            <h2 class="modal-titulo-huf">Gestión de Usuarios y Permisos</h2>
+            
+            <form onsubmit="crearNuevoUsuario(event)" style="margin-bottom: 25px; padding-bottom: 15px; border-bottom: 1px solid #dee2e6;">
+                <h4 style="margin-bottom: 10px; font-size: 14px;">Registrar Nuevo Usuario</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items: end;">
+                    <div class="form-group" style="margin: 0;">
+                        <label>Usuario:</label>
+                        <input type="text" id="nuevo-user-nombre" required>
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label>Contraseña:</label>
+                        <input type="password" id="nuevo-user-pass" required>
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label>Rol:</label>
+                        <select id="nuevo-user-rol" style="width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #ced4da;">
+                            <option value="USUARIO">Usuario (Tickets/Búsquedas)</option>
+                            <option value="ADMIN">Administrador (Modificar Inventario)</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn-huf">Crear</button>
+                </div>
+            </form>
+
+            <h4 style="margin-bottom: 10px; font-size: 14px;">Usuarios Registrados en Sistema</h4>
+            <div id="lista-usuarios-sistema" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto;">
+                <!-- Carga dinámica -->
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL EDITAR CAJÓN (GABINETES) -->
+    <div id="modal-cajon" class="modal">
+        <div class="modal-contenido">
+            <span class="cerrar" onclick="cerrarModal('modal-cajon')">&times;</span>
+            <h2 id="titulo-modal-cajon" class="modal-titulo-huf">Editar Cajón</h2>
+            <form onsubmit="guardarCajon(event)">
+                <input type="hidden" id="cajon-gab-id">
+                <input type="hidden" id="cajon-num-id">
+                <div class="form-group">
+                    <label>Material / Componente:</label>
+                    <input type="text" id="material-nombre" required>
+                </div>
+                <div class="form-group">
+                    <label>Cantidad (pzs):</label>
+                    <input type="number" id="material-cantidad" min="0" required>
+                </div>
+                <button type="submit" class="btn-huf" style="width: 100%;">Guardar Cambios</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL DETALLE DE UN LOCKER COMPLETO -->
+    <div id="modal-locker-detalle" class="modal">
+        <div class="modal-contenido modal-ancho">
+            <span class="cerrar" onclick="cerrarModal('modal-locker-detalle')">&times;</span>
+            <h2 id="titulo-modal-locker-detalle" class="modal-titulo-huf">Locker A</h2>
+            <div id="contenido-estantes-locker" class="lista-estantes-container"></div>
+        </div>
+    </div>
+
+    <!-- MODAL AGREGAR / EDITAR PIEZA EN UN ESTANTE -->
+    <div id="modal-editar-pieza" class="modal">
+        <div class="modal-contenido">
+            <span class="cerrar" onclick="cerrarModal('modal-editar-pieza')">&times;</span>
+            <h2 id="titulo-modal-pieza" class="modal-titulo-huf">Agregar Fixture / Pieza</h2>
+            <form onsubmit="guardarPiezaLocker(event)">
+                <input type="hidden" id="pieza-locker-id">
+                <input type="hidden" id="pieza-div-id">
+                <input type="hidden" id="pieza-index-id">
+                
+                <div class="form-group">
+                    <label>Nombre del Fixture / Equipo:</label>
+                    <input type="text" id="input-pieza-nombre" placeholder="Ej: Fixture F-01 Pruebas" required>
+                </div>
+                <div class="form-group">
+                    <label>Descripción / Observaciones:</label>
+                    <textarea id="input-pieza-desc" rows="3" placeholder="Ej: Arnés de prueba para Huf PUEBLA..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Fotografía del Fixture (Subir archivo directo):</label>
+                    <input type="file" id="input-pieza-foto-file" accept="image/*" onchange="convertirImagenBase64(this)">
+                    <input type="hidden" id="input-pieza-foto-base64">
+                    <div id="preview-foto-miniatura" style="margin-top: 10px; display: none;">
+                        <img id="img-pieza-miniatura-prev" class="img-preview-thumb" src="" alt="Vista previa">
+                    </div>
+                </div>
+                <button type="submit" class="btn-huf" style="width: 100%;">Guardar Fixture</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- VISOR DE FOTO COMPLETA -->
+    <div id="modal-visor-foto" class="modal" onclick="cerrarModal('modal-visor-foto')">
+        <div class="modal-contenido modal-foto-fullscreen">
+            <span class="cerrar" onclick="cerrarModal('modal-visor-foto')">&times;</span>
+            <img id="foto-ampliada-src" src="" alt="Foto Ampliada">
+        </div>
+    </div>
+
+    <!-- MODAL GENERAR TICKET -->
+    <div id="modal-ticket" class="modal">
+        <div class="modal-contenido">
+            <span class="cerrar" onclick="cerrarModal('modal-ticket')">&times;</span>
+            <h2 class="modal-titulo-huf">Solicitar Material a Tooling</h2>
+            <form onsubmit="enviarSolicitudTicketInterno(event)">
+                <input type="hidden" id="ticket-material-nombre">
+                <div class="form-group">
+                    <label>Material Solicitado:</label>
+                    <input type="text" id="ticket-material-mostrar" disabled>
+                </div>
+                <div class="form-group">
+                    <label>Solicitado por:</label>
+                    <input type="text" id="ticket-solicitante-display" disabled style="background-color: #e9ecef; font-weight: bold; color: #e30613;">
+                </div>
+                <div class="form-group">
+                    <label>Cantidad Requerida:</label>
+                    <input type="number" id="ticket-cantidad" min="1" value="1" required>
+                </div>
+                <div class="form-group">
+                    <label>Área / Proyecto o Motivo:</label>
+                    <input type="text" id="ticket-motivo" placeholder="Ej: Estación de pruebas Huf 2" required>
+                </div>
+                <button type="submit" class="btn-huf" style="width: 100%;">Enviar Ticket Directo</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL AGREGAR MATERIAL (ADMIN) -->
+    <div id="modal-nuevo-material-nacho" class="modal">
+        <div class="modal-contenido">
+            <span class="cerrar" onclick="cerrarModal('modal-nuevo-material-nacho')">&times;</span>
+            <h2 class="modal-titulo-huf">Agregar Nuevo Material a Tooling</h2>
+            <form onsubmit="guardarMaterialNacho(event)">
+                <div class="form-group">
+                    <label>Nombre del Material:</label>
+                    <input type="text" id="nacho-mat-nombre" required>
+                </div>
+                <div class="form-group">
+                    <label>Descripción / Especificaciones:</label>
+                    <input type="text" id="nacho-mat-desc" required>
+                </div>
+                <div class="form-group">
+                    <label>Cantidad Disponible:</label>
+                    <input type="number" id="nacho-mat-cant" required>
+                </div>
+                <button type="submit" class="btn-huf" style="width: 100%;">Agregar a Lista</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- MODAL EDITAR CANTIDAD -->
+    <div id="modal-editar-cantidad-nacho" class="modal">
+        <div class="modal-content modal-huf-diseno">
+            <span class="cerrar" onclick="cerrarModal('modal-editar-cantidad-nacho')">&times;</span>
+            <div class="modal-header-huf">
+                <h3>Ajustar Inventario</h3>
+            </div>
+            <div class="modal-body-huf">
+                <p class="subtitulo-material">Material: <strong id="edit-cant-material-nombre" class="texto-destacado-huf">---</strong></p>
+                <form onsubmit="guardarCantidadModal(event)">
+                    <div class="form-group-huf">
+                        <label for="edit-cant-material-input">Nueva Cantidad Disponible:</label>
+                        <div class="input-con-unidad">
+                            <input type="number" id="edit-cant-material-input" min="0" required class="input-huf-custom">
+                            <span class="unidad-tag">pzs/rollos</span>
+                        </div>
+                    </div>
+                    <div class="acciones-modal-huf">
+                        <button type="button" class="btn-huf-cancelar" onclick="cerrarModal('modal-editar-cantidad-nacho')">Cancelar</button>
+                        <button type="submit" class="btn-huf-guardar">Guardar Cambios</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL BÚSQUEDA LOCKERS -->
+    <div id="modal-resultados-lockers" class="modal">
+        <div class="modal-content modal-huf-diseno" style="max-width: 520px;">
+            <div class="modal-header-huf">
+                <h3>Resultados de Búsqueda en Lockers</h3>
+                <span class="cerrar" onclick="cerrarModal('modal-resultados-lockers')">&times;</span>
+            </div>
+            <div class="modal-body-huf">
+                <div id="contenedor-resultados-busqueda-lockers" class="lista-resultados-lockers"></div>
+                <div class="acciones-modal-huf">
+                    <button type="button" class="btn-huf-guardar" onclick="cerrarModal('modal-resultados-lockers')">Aceptar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL CONFIRMAR ELIMINACIÓN -->
+    <div id="modal-confirmar-eliminar-nacho" class="modal">
+        <div class="modal-content modal-huf-diseno">
+            <span class="cerrar" onclick="cerrarModal('modal-confirmar-eliminar-nacho')">&times;</span>
+            <div class="modal-header-huf">
+                <h3>Confirmar Eliminación</h3>
+            </div>
+            <div class="modal-body-huf">
+                <p class="subtitulo-material">
+                    ¿Estás seguro de que deseas eliminar <strong id="nombre-eliminar-material" class="texto-destacado-huf">---</strong> del catálogo?
+                </p>
+                <div class="acciones-modal-huf">
+                    <button type="button" class="btn-huf-cancelar" onclick="cerrarModal('modal-confirmar-eliminar-nacho')">Cancelar</button>
+                    <button type="button" class="btn-huf-eliminar-confirmar" onclick="confirmarEliminacionMaterial()">Eliminar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
