@@ -3,41 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Laboratory Inventory - Huf México</title>
+    <title>Laboratorio de Control e Inventario - Huf México</title>
     <link rel="stylesheet" href="css/estilo.css">
-    
-    <!-- Chart.js para analíticas -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
-    <!-- HEADER CON LOGO FIJO PERMANENTE HUF MEXICO -->
+    <!-- ENCABEZADO ESTILO HUF -->
     <header>
         <div class="header-brand">
-            <svg width="120" height="30" viewBox="0 0 200 50" fill="none" xmlns="http://www.w3.org/2000/svg" style="pointer-events: none; user-select: none;">
-                <rect width="200" height="50" rx="4" fill="#1A1D20"/>
-                <text x="15" y="35" font-family="'Segoe UI', sans-serif" font-weight="900" font-size="28" fill="#E30613">HUF</text>
-                <text x="85" y="32" font-family="'Segoe UI', sans-serif" font-weight="600" font-size="14" fill="#FFFFFF">MEXICO</text>
-            </svg>
-            <h1>Laboratory Inventory</h1>
+            <img src="HUFLOGO.PNG" alt="Logo Huf México" class="header-logo">
+            <h1>Laboratorio de Control e Inventario</h1>
         </div>
         
         <nav class="nav-tabs" id="nav-tabs-container" style="display: none;">
-            <button class="btn-tab activo" onclick="cambiarPestana(event, 'tab-landing')">Home</button>
-            <button class="btn-tab" onclick="cambiarPestana(event, 'tab-gabinetes')">Inventory & Lockers</button>
-            <button class="btn-tab" onclick="cambiarPestana(event, 'tab-fixtures')">Fixtures List</button>
-            <button class="btn-tab" onclick="cambiarPestana(event, 'tab-solicitudes')">Materials & Tickets</button>
-            <button class="btn-tab" onclick="cambiarPestana(event, 'tab-analytics')">Analytics</button>
-            <button class="btn-tab" id="tab-btn-auditoria" onclick="cambiarPestana(event, 'tab-auditoria')" style="display: none;">Monthly Audit</button>
+            <button class="btn-tab activo" onclick="cambiarPestana(event, 'tab-gabinetes')">Gabinetes</button>
+            <button class="btn-tab" onclick="cambiarPestana(event, 'tab-lockers')">Lockers / Fixtures</button>
+            <button class="btn-tab" onclick="cambiarPestana(event, 'tab-solicitudes')">Materiales</button>
+            <button class="btn-tab" onclick="cambiarPestana(event, 'tab-graficas'); actualizarGraficas();">Gráficas</button>
+            <button class="btn-tab" onclick="cambiarPestana(event, 'tab-historial'); renderizarHistorialModificaciones();">Historial</button>
         </nav>
 
         <div class="usuario-panel">
-            <span id="usuario-login">Guest</span>
-            <button class="btn-login" id="btn-login-trigger" onclick="abrirModal('modal-login')">Login</button>
-            <button class="btn-login" id="btn-register-trigger" onclick="abrirModal('modal-register')">Register</button>
-            <button class="btn-login" id="btn-logout-trigger" style="display: none;" onclick="cerrarSesion()">Logout</button>
+            <span id="usuario-login">Invitado</span>
+            <button class="btn-login" id="btn-login-trigger" onclick="abrirModal('modal-login')">Ingresar</button>
+            <button class="btn-login" id="btn-logout-trigger" style="display: none;" onclick="cerrarSesion()">Cerrar Sesión</button>
 
-            <!-- OPCIONES EXCLUSIVAS DE MASTER -->
             <div id="panel-master-acciones" style="display: none; gap: 8px;">
                 <button class="btn-huf-secundario" onclick="abrirModal('modal-gestion-usuarios')" title="Gestionar Usuarios">+ Usuarios</button>
                 <button class="btn-huf-secundario" onclick="exportarDatos()" title="Exportar Backup">Exportar</button>
@@ -47,7 +37,7 @@
         </div>
     </header>
 
-    <!-- MENSAJE DE ACCESO RESTRINGIDO (CUANDO NO HAY SESIÓN) -->
+    <!-- MENSAJE DE ACCESO RESTRINGIDO -->
     <div id="bloqueo-pantalla" class="tab-content activo" style="text-align: center; padding-top: 80px;">
         <div class="buscador-container" style="max-width: 500px; margin: 0 auto; padding: 40px 20px;">
             <h2 style="color: #e30613; margin-bottom: 15px;">Acceso Restringido</h2>
@@ -56,135 +46,340 @@
         </div>
     </div>
 
-    <!-- CONTENIDO PRINCIPAL (SOLO VISIBLE CON SESIÓN INICIADA) -->
+    <!-- CONTENIDO PRINCIPAL -->
     <div id="contenido-protegido" style="display: none;">
 
-        <!-- PANTALLA INICIAL POST-LOGIN (LANDING MODULAR) -->
-        <main id="tab-landing" class="tab-content activo">
-            <div style="text-align: center; margin-bottom: 30px;">
-                <h2>Laboratory Management System</h2>
-                <p style="color: #6c757d;">Select a module to continue</p>
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; max-width: 800px; margin: 0 auto;">
-                <div class="card-locker-selector" onclick="navegarAModulo('tab-gabinetes')">
-                    <h3>Inventory</h3>
-                    <p>Manage Lockers, Cabinets, and Tooling Stock</p>
-                </div>
-                <div class="card-locker-selector" onclick="navegarAModulo('tab-fixtures')">
-                    <h3>Fixtures</h3>
-                    <p>Access Global Fixture Directory by Client & Project</p>
-                </div>
-            </div>
-        </main>
+        <!-- PANTALLA DE SELECCIÓN INICIAL -->
+        <main id="tab-seleccion-inicial" class="tab-content activo">
+            <div style="text-align: center; padding: 60px 20px; max-width: 900px; margin: 0 auto;">
+                <h1 style="color: #e30613; font-size: 32px; margin-bottom: 15px;">Bienvenido al Laboratorio de Control</h1>
+                <p style="color: #495057; font-size: 16px; margin-bottom: 50px;">Por favor, selecciona el módulo al que deseas acceder.</p>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; max-width: 700px; margin: 0 auto;">
+                    
+                    <div onclick="mostrarSeccion('fixtures')" style="background: #ffffff; border: 2px solid #e30613; border-radius: 15px; padding: 40px 20px; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(227, 6, 19, 0.15);">
+                        <div style="font-size: 50px; margin-bottom: 15px;">📋</div>
+                        <h2 style="color: #e30613; font-size: 22px; margin-bottom: 10px;">Lista de Fixtures</h2>
+                        <p style="color: #6c757d; font-size: 14px;">Catálogo global de fixtures con ubicación y contacto.</p>
+                    </div>
 
-        <!-- PESTAÑA: GABINETES Y LOCKERS -->
-        <main id="tab-gabinetes" class="tab-content">
-            <section class="buscador-container">
-                <h3>Buscador General de Componentes</h3>
-                <form class="barra-busqueda" onsubmit="ejecutarBusqueda(event)">
-                    <input type="text" id="buscar" placeholder="Ej: Tornillo M6, Resistencia 10k, Relevador...">
-                    <button type="submit" class="btn-huf">Buscar</button>
-                </form>
-            </section>
-
-            <!-- GABINETE 1: ELECTRÓNICO (8x8) -->
-            <div class="gabinete-wrapper">
-                <h2>Gabinete 1: Componentes Electrónicos (8 x 8)</h2>
-                <div id="gabinete-1" class="gabinete-8x8"></div>
-            </div>
-
-            <!-- GABINETE 2: TORNILLOS ESTÁNDAR (6x10) -->
-            <div class="gabinete-wrapper">
-                <h2>Gabinete 2: Tornillos Estándar (6 x 10)</h2>
-                <div id="gabinete-2" class="gabinete-6x10"></div>
-            </div>
-
-            <!-- GABINETE 3: ELÉCTRICO ROJO -->
-            <div class="gabinete-wrapper gabinete-rojo-border">
-                <h2 style="color: #e30613;">Gabinete 3: Material Eléctrico (Especial Rojo)</h2>
-                <div class="gabinete-electrico-rojo">
-                    <div id="gab3-izq" class="col-grandes"></div>
-                    <div id="gab3-centro" class="col-centro"></div>
-                    <div id="gab3-der" class="col-grandes"></div>
-                </div>
-            </div>
-
-            <div class="buscador-container" style="margin-top: 40px;">
-                <h3>Buscador de Fixtures y Equipos en Lockers</h3>
-                <form class="barra-busqueda" onsubmit="buscarLockers(event)">
-                    <input type="text" id="buscar-locker" placeholder="Ej: Fixture F-01, Base de Pruebas...">
-                    <button type="submit" class="btn-huf">Buscar en Lockers</button>
-                </form>
-            </div>
-
-            <div class="grid-lockers-tarjetas" id="contenedor-lockers"></div>
-        </main>
-
-        <!-- PESTAÑA: FIXTURES GLOBAL LIST -->
-        <main id="tab-fixtures" class="tab-content">
-            <div class="buscador-container">
-                <h3>Global Fixture Directory</h3>
-                <div class="barra-busqueda">
-                    <input type="text" id="buscar-fixtures" placeholder="Search by Name, Project Number, Description..." onkeyup="filtrarFixturesGlobales()">
-                    <select id="filtro-cliente-fixture" onchange="filtrarFixturesGlobales()">
-                        <option value="">All Clients</option>
-                    </select>
-                </div>
-            </div>
-            <div id="contenedor-fixtures-jerarquico" class="catalogo-grid"></div>
-        </main>
-
-        <!-- PESTAÑA: MATERIALES Y SOLICITUDES -->
-        <main id="tab-solicitudes" class="tab-content">
-            <section class="seccion-tickets-nacho">
-                <div class="header-solicitudes">
-                    <h3>Solicitudes / Tickets de Materiales</h3>
-                    <span class="badge-tickets" id="num-tickets-pendientes">0 Pendientes</span>
-                </div>
-                <div id="lista-tickets-contenedor" class="grid-tickets">
-                    <p style="color: #6c757d; font-size: 14px;">No hay tickets pendientes actualmente.</p>
-                </div>
-            </section>
-
-            <div class="buscador-container" style="margin-top: 30px;">
-                <h3>Materiales Disponibles de Tooling</h3>
-                <form class="barra-busqueda" onsubmit="buscarMaterialNacho(event)">
-                    <input type="text" id="buscar-nacho" placeholder="Ej: Cinta aislar, Pegamento, Clemas...">
-                    <button type="submit" class="btn-huf">Buscar Consumible</button>
-                </form>
-                <div id="panel-admin-nacho" style="margin-top: 15px; display: none;">
-                    <button class="btn-huf-secundario" onclick="abrirModal('modal-nuevo-material-nacho')">+ Agregar Nuevo Material a Lista</button>
-                </div>
-            </div>
-
-            <div class="catalogo-grid" id="catalogo-nacho"></div>
-        </main>
-
-        <!-- PESTAÑA: ANALYTICS & DASHBOARD -->
-        <main id="tab-analytics" class="tab-content">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                <div class="gabinete-wrapper">
-                    <h2>Search Trend Chart</h2>
-                    <canvas id="chartBusquedas"></canvas>
-                </div>
-                <div class="gabinete-wrapper">
-                    <h2>Top Requested Materials Chart</h2>
-                    <canvas id="chartMateriales"></canvas>
+                    <div onclick="mostrarSeccion('inventario')" style="background: #ffffff; border: 2px solid #e30613; border-radius: 15px; padding: 40px 20px; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(227, 6, 19, 0.15);">
+                        <div style="font-size: 50px; margin-bottom: 15px;">📦</div>
+                        <h2 style="color: #e30613; font-size: 22px; margin-bottom: 10px;">Inventario</h2>
+                        <p style="color: #6c757d; font-size: 14px;">Accede a Gabinetes, Lockers, Materiales y Gráficas.</p>
+                    </div>
                 </div>
             </div>
         </main>
 
-        <!-- PESTAÑA: AUDITORÍA MENSUAL ALEATORIA (ADMINS) -->
-        <main id="tab-auditoria" class="tab-content">
-            <div class="gabinete-wrapper">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <h2>Monthly Audit Log & Pair Assignment</h2>
-                    <button class="btn-huf" onclick="generarSorteoAnualAuditoria()">Generate Annual Pairs</button>
-                </div>
-                <div id="contenedor-parejas-auditoria" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px;"></div>
+        <!-- SECCIÓN DE INVENTARIO COMPLETA -->
+        <div id="seccion-inventario-completa" style="display: none;">
+            
+            <div style="padding: 10px 25px 0 25px; max-width: 1400px; margin: 0 auto;">
+                <button class="btn-huf-secundario" onclick="volverAlMenuPrincipal()" style="display: flex; align-items: center; gap: 8px;">
+                    ← Volver al Menú Principal
+                </button>
             </div>
-        </main>
 
+            <!-- PESTAÑA 1: GABINETES Y CAJONES -->
+            <main id="tab-gabinetes" class="tab-content activo">
+                <section class="buscador-container">
+                    <h3>Buscador General de Componentes</h3>
+                    <form class="barra-busqueda" onsubmit="ejecutarBusqueda(event)">
+                        <input type="text" id="buscar" placeholder="Ej: Tornillo M6, Resistencia 10k, Relevador...">
+                        <button type="submit" class="btn-huf">Buscar</button>
+                    </form>
+                    <div id="panel-admin-gabinetes" style="margin-top: 15px; display: none;">
+                        <button class="btn-huf-secundario" onclick="abrirModalCrearGabinete()">+ Crear Nuevo Gabinete</button>
+                    </div>
+                </section>
+
+                <div id="contenedor-gabinetes-dinamicos"></div>
+            </main>
+
+            <!-- PESTAÑA 2: LOCKERS -->
+            <main id="tab-lockers" class="tab-content">
+                <div id="panel-admin-clientes" class="panel-clientes-huf">
+                    <details class="desplegable-huf" open>
+                        <summary class="summary-huf">Clientes Registrados en el Sistema</summary>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin: 15px 0 10px 0; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px;">
+                            <span style="font-size: 13px; font-weight: bold; color: #495057;">Lista Activa de Clientes</span>
+                            <button class="btn-huf-secundario" style="font-size: 12px; padding: 6px 12px;" onclick="abrirModal('modal-nuevo-cliente')">+ Agregar Cliente</button>
+                        </div>
+                        <div id="lista-clientes-sistema" class="contenedor-clientes-lista"></div>
+                    </details>
+                </div>
+
+                <div class="buscador-container">
+                    <h3>Buscador de Fixtures y Equipos en Lockers</h3>
+                    <form class="barra-busqueda" onsubmit="buscarLockers(event)">
+                        <input type="text" id="buscar-locker" placeholder="Ej: Fixture F-01, Base de Pruebas, Puebla...">
+                        <button type="submit" class="btn-huf">Buscar en Lockers</button>
+                    </form>
+                </div> 
+
+                <div class="grid-lockers-tarjetas" id="contenedor-lockers"></div>
+            </main>
+
+            <!-- PESTAÑA 3: MATERIALES Y SOLICITUDES -->
+            <main id="tab-solicitudes" class="tab-content">
+                <section class="seccion-tickets-nacho">
+                    <div class="header-solicitudes">
+                        <h3>Solicitudes / Tickets de Materiales</h3>
+                        <span class="badge-tickets" id="num-tickets-pendientes">0 Pendientes</span>
+                    </div>
+                    <div id="lista-tickets-contenedor" class="grid-tickets">
+                        <p style="color: #6c757d; font-size: 14px;">No hay tickets pendientes actualmente.</p>
+                    </div>
+                </section>
+
+                <div class="buscador-container" style="margin-top: 30px;">
+                    <h3>Materiales Disponibles de Tooling</h3>
+                    <form class="barra-busqueda" onsubmit="buscarMaterialNacho(event)">
+                        <input type="text" id="buscar-nacho" placeholder="Ej: Cinta aislar, Pegamento, Clemas...">
+                        <button type="submit" class="btn-huf">Buscar Consumible</button>
+                    </form>
+                    <div id="panel-admin-nacho" style="margin-top: 15px; display: none;">
+                        <button class="btn-huf-secundario" onclick="abrirModal('modal-nuevo-material-nacho')">+ Agregar Nuevo Material a Lista</button>
+                    </div>
+                </div>
+
+                <div class="catalogo-grid" id="catalogo-nacho"></div>
+            </main>
+
+            <!-- PESTAÑA 4: GRÁFICAS -->
+            <main id="tab-graficas" class="tab-content">
+                <div class="buscador-container">
+                    <h3>Estadísticas y Métricas del Inventario</h3>
+                    <p style="font-size: 13px; color: #6c757d;">Visualización de los componentes más buscados por gabinete y los materiales más solicitados.</p>
+                </div>
+
+                <div class="grid-graficas">
+                    <div class="card-grafica">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px;">
+                            <h3 style="margin: 0; border: none; padding: 0;">Tornillos y Componentes más Buscados (Gabinetes)</h3>
+                            <button class="btn-huf-secundario" style="font-size: 11px; padding: 5px 10px;" onclick="vaciarDatosGrafica('gabinetes')">Vaciar Datos</button>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chartBusquedasGabinetes"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="card-grafica">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px;">
+                            <h3 style="margin: 0; border: none; padding: 0;">Materiales más Solicitados (Tooling)</h3>
+                            <button class="btn-huf-secundario" style="font-size: 11px; padding: 5px 10px;" onclick="vaciarDatosGrafica('materiales')">Vaciar Datos</button>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chartMaterialesSolicitados"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-clientes-huf" style="margin-top: 25px;">
+                    <details class="desplegable-huf" open>
+                        <summary class="summary-huf">Historial de Gráfica</summary>
+                        <div style="margin: 15px 0 10px 0; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px;">
+                            <span style="font-size: 13px; font-weight: bold; color: #495057;">Registros Guardados y Fechas</span>
+                        </div>
+                        <div id="lista-historial-graficas" style="display: flex; flex-direction: column; gap: 10px;">
+                            <p style="font-size: 13px; color: #6c757d;">No hay registros en el historial todavía.</p>
+                        </div>
+                    </details>
+                </div>
+            </main>
+
+            <!-- PESTAÑA 5: HISTORIAL DE MODIFICACIONES -->
+            <main id="tab-historial" class="tab-content">
+                <div class="buscador-container">
+                    <h3>Historial de Modificaciones del Sistema</h3>
+                    <p style="font-size: 13px; color: #6c757d;">Registro cronológico de todas las acciones realizadas por los usuarios.</p>
+                </div>
+
+                <div class="panel-clientes-huf">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px; flex-wrap: wrap; gap: 10px;">
+                        <span style="font-size: 14px; font-weight: bold; color: #343a40;">Últimas Modificaciones</span>
+                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                            <select id="filtro-historial-tipo" onchange="renderizarHistorialModificaciones()" style="padding: 6px 10px; border-radius: 6px; border: 1px solid #ced4da; font-size: 12px; background: #f8f9fa;">
+                                <option value="">Todos los tipos</option>
+                                <option value="GABINETE">Gabinetes</option>
+                                <option value="LOCKER">Lockers / Fixtures</option>
+                                <option value="CLIENTE">Clientes</option>
+                                <option value="MATERIAL">Materiales</option>
+                                <option value="TICKET">Tickets</option>
+                                <option value="USUARIO">Usuarios</option>
+                                <option value="FIXTURE_GLOBAL">Fixtures Globales</option>
+                            </select>
+                            <button class="btn-huf-secundario" style="font-size: 12px; padding: 6px 12px;" onclick="limpiarHistorialModificaciones()">Limpiar Historial</button>
+                        </div>
+                    </div>
+                    <div id="lista-historial-modificaciones" style="display: flex; flex-direction: column; gap: 10px; max-height: 70vh; overflow-y: auto; padding-right: 5px;">
+                        <p style="font-size: 13px; color: #6c757d;">Cargando historial...</p>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- SECCIÓN LISTA DE FIXTURES GLOBAL (REDISEÑADA)                -->
+        <!-- ============================================================ -->
+        <div id="seccion-lista-fixtures" style="display: none;">
+            <div style="padding: 10px 25px 0 25px; max-width: 1400px; margin: 0 auto;">
+                <button class="btn-huf-secundario" onclick="volverAlMenuPrincipal()" style="display: flex; align-items: center; gap: 8px;">
+                    ← Volver al Menú Principal
+                </button>
+            </div>
+
+            <div class="tab-content activo" style="padding-top: 15px;">
+                <!-- ENCABEZADO CON BOTÓN AGREGAR -->
+                <div class="buscador-container" style="padding: 25px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 15px;">
+                        <div style="text-align: left;">
+                            <h2 style="color: #e30613; font-size: 22px; margin-bottom: 5px;">📋 Catálogo Global de Fixtures</h2>
+                            <p style="font-size: 13px; color: #6c757d;">Ubicación física y contacto en planta de cada fixture. Disponible para todas las plantas Huf.</p>
+                        </div>
+                        <button class="btn-huf" onclick="abrirModalNuevoFixtureGlobal()" style="padding: 10px 20px;">+ Agregar Fixture a la Lista</button>
+                    </div>
+
+                    <form class="barra-busqueda" onsubmit="buscarFixtureGlobal(event)" style="max-width: 700px;">
+                        <input type="text" id="buscar-fixture-global" placeholder="Buscar por nombre, cliente, planta, país, proyecto...">
+                        <button type="submit" class="btn-huf">Buscar</button>
+                        <button type="button" class="btn-huf-secundario" onclick="limpiarBusquedaFixtureGlobal()">Limpiar</button>
+                    </form>
+                </div>
+
+                <!-- CONTENEDOR DE FIXTURES AGRUPADOS POR CLIENTE -->
+                <div id="contenedor-fixtures-globales"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- MODALES EXISTENTES (sin cambios)                              -->
+    <!-- ============================================================ -->
+
+    <!-- MODAL AGREGAR / EDITAR GABINETE -->
+    <div id="modal-nuevo-gabinete" class="modal">
+        <div class="modal-contenido modal-ancho">
+            <span class="cerrar" onclick="cerrarModal('modal-nuevo-gabinete')">&times;</span>
+            <h2 id="titulo-modal-gabinete" class="modal-titulo-huf">Configurar Gabinete</h2>
+            <form onsubmit="guardarGabineteEstructura(event)">
+                <input type="hidden" id="gabinete-id-editar">
+                
+                <div class="form-group">
+                    <label>Nombre del Gabinete:</label>
+                    <input type="text" id="gabinete-nombre-input" placeholder="Ej: Gabinete 4: Arneses" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Color Personalizado del Gabinete:</label>
+                    <input type="color" id="gabinete-color-input" value="#e30613" style="height: 40px; padding: 2px; cursor: pointer;">
+                </div>
+
+                <div class="form-group">
+                    <label style="font-weight: bold; color: #e30613; margin-bottom: 10px; display: block;">Selecciona la Modalidad del Gabinete:</label>
+                    <input type="hidden" id="gabinete-tipo-select" value="CANTIDAD">
+
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 15px;">
+                        
+                        <div id="card-mod-CANTIDAD" onclick="seleccionarModalidadGabinete('CANTIDAD')" style="border: 2px solid #e30613; background: #fff5f5; border-radius: 8px; padding: 12px; text-align: center; cursor: pointer; transition: all 0.2s;">
+                            <div style="display: flex; justify-content: center; gap: 4px; margin-bottom: 8px;">
+                                <div style="width: 18px; height: 18px; background: #e30613; border-radius: 3px;"></div>
+                                <div style="width: 18px; height: 18px; background: #e30613; border-radius: 3px;"></div>
+                                <div style="width: 18px; height: 18px; background: #e30613; border-radius: 3px;"></div>
+                            </div>
+                            <strong style="font-size: 13px; color: #1a1d20; display: block;">Por Cantidad</strong>
+                            <span style="font-size: 11px; color: #6c757d;">Cajones seguidos (ej. 30 cajones)</span>
+                        </div>
+
+                        <div id="card-mod-GRID" onclick="seleccionarModalidadGabinete('GRID')" style="border: 1px solid #dee2e6; background: #ffffff; border-radius: 8px; padding: 12px; text-align: center; cursor: pointer; transition: all 0.2s;">
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; width: 42px; margin: 0 auto 8px auto;">
+                                <div style="height: 10px; background: #343a40; border-radius: 2px;"></div>
+                                <div style="height: 10px; background: #343a40; border-radius: 2px;"></div>
+                                <div style="height: 10px; background: #343a40; border-radius: 2px;"></div>
+                                <div style="height: 10px; background: #343a40; border-radius: 2px;"></div>
+                                <div style="height: 10px; background: #343a40; border-radius: 2px;"></div>
+                                <div style="height: 10px; background: #343a40; border-radius: 2px;"></div>
+                            </div>
+                            <strong style="font-size: 13px; color: #1a1d20; display: block;">Matriz Uniforme</strong>
+                            <span style="font-size: 11px; color: #6c757d;">Filas y Columnas (ej. 8x8)</span>
+                        </div>
+
+                        <div id="card-mod-CUSTOM" onclick="seleccionarModalidadGabinete('CUSTOM')" style="border: 1px solid #dee2e6; background: #ffffff; border-radius: 8px; padding: 12px; text-align: center; cursor: pointer; transition: all 0.2s;">
+                            <div style="display: flex; gap: 4px; justify-content: center; height: 26px; margin-bottom: 8px;">
+                                <div style="width: 10px; height: 100%; background: #e30613; border-radius: 2px;"></div>
+                                <div style="width: 22px; height: 100%; border: 1px dashed #e30613; border-radius: 2px; display: grid; grid-template-columns: repeat(2,1fr); gap: 1px; padding: 1px;">
+                                    <div style="background:#e30613;"></div><div style="background:#e30613;"></div>
+                                    <div style="background:#e30613;"></div><div style="background:#e30613;"></div>
+                                </div>
+                                <div style="width: 10px; height: 100%; background: #e30613; border-radius: 2px;"></div>
+                            </div>
+                            <strong style="font-size: 13px; color: #1a1d20; display: block;">Especial / Custom</strong>
+                            <span style="font-size: 11px; color: #6c757d;">Lateral + Centro + Lateral</span>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div class="form-group" id="grupo-cant-cajones">
+                    <label>Cantidad total de Cajones:</label>
+                    <input type="number" id="gabinete-cant-input" min="1" max="200" placeholder="Ej: 30">
+                </div>
+
+                <div class="form-group" id="grupo-grid-cajones" style="display: none;">
+                    <div style="display: flex; gap: 10px;">
+                        <div>
+                            <label>Filas:</label>
+                            <input type="number" id="gabinete-filas-input" min="1" max="20" placeholder="6">
+                        </div>
+                        <div>
+                            <label>Columnas:</label>
+                            <input type="number" id="gabinete-cols-input" min="1" max="20" placeholder="6">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group" id="grupo-custom-cajones" style="display: none; background: #f8f9fa; padding: 12px; border-radius: 6px; border: 1px solid #dee2e6;">
+                    <label style="font-weight: bold; color: #e30613; margin-bottom: 8px; display: block;">Configuración de Estructura Personalizada:</label>
+                    <div style="margin-bottom: 10px;">
+                        <label>Columna Izquierda (Filas Grandes):</label>
+                        <input type="number" id="custom-col-izq-filas" min="1" max="20" value="3">
+                    </div>
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                        <div>
+                            <label>Centro (Columnas):</label>
+                            <input type="number" id="custom-col-centro-cols" min="1" max="20" value="4">
+                        </div>
+                        <div>
+                            <label>Centro (Filas):</label>
+                            <input type="number" id="custom-col-centro-filas" min="1" max="20" value="5">
+                        </div>
+                    </div>
+                    <div>
+                        <label>Columna Derecha (Filas Grandes):</label>
+                        <input type="number" id="custom-col-der-filas" min="1" max="20" value="3">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-huf" style="width: 100%; margin-top: 15px;">Guardar Gabinete</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL AGREGAR CLIENTE -->
+    <div id="modal-nuevo-cliente" class="modal">
+        <div class="modal-contenido">
+            <span class="cerrar" onclick="cerrarModal('modal-nuevo-cliente')">&times;</span>
+            <h2 class="modal-titulo-huf">Registrar Nuevo Cliente</h2>
+            <form onsubmit="guardarNuevoCliente(event)">
+                <div class="form-group">
+                    <label>Nombre del Cliente:</label>
+                    <input type="text" id="input-nuevo-cliente-nombre" placeholder="Ej: Volkswagen, BMW, Audi..." required>
+                </div>
+                <button type="submit" class="btn-huf" style="width: 100%; margin-top: 10px;">Guardar Cliente</button>
+            </form>
+        </div>
     </div>
 
     <!-- MODAL LOGIN -->
@@ -194,8 +389,8 @@
             <h2 class="modal-titulo-huf">Iniciar Sesión</h2>
             <form onsubmit="iniciarSesion(event)">
                 <div class="form-group">
-                    <label>Usuario / Email:</label>
-                    <input type="text" id="usuario" placeholder="user@huf-group.com" required>
+                    <label>Usuario:</label>
+                    <input type="text" id="usuario" placeholder="Ej: Jandry, Nacho..." required>
                 </div>
                 <div class="form-group">
                     <label>Contraseña:</label>
@@ -203,30 +398,6 @@
                 </div>
                 <p id="mensaje-error-login" style="color: #e30613; display: none; font-size: 13px; margin-bottom: 10px;"></p>
                 <button type="submit" class="btn-huf" style="width: 100%;">Ingresar</button>
-            </form>
-        </div>
-    </div>
-
-    <!-- MODAL REGISTRO DE USUARIO -->
-    <div id="modal-register" class="modal">
-        <div class="modal-contenido">
-            <span class="cerrar" onclick="cerrarModal('modal-register')">&times;</span>
-            <h2 class="modal-titulo-huf">Create Account</h2>
-            <form onsubmit="registrarUsuarioForm(event)">
-                <div class="form-group">
-                    <label>Email Address:</label>
-                    <input type="email" id="reg-email" required placeholder="user@huf-group.com">
-                </div>
-                <div class="form-group">
-                    <label>Full Name:</label>
-                    <input type="text" id="reg-nombre" required placeholder="John Doe">
-                </div>
-                <div class="form-group">
-                    <label>Password:</label>
-                    <input type="password" id="reg-password" required minlength="6">
-                </div>
-                <p id="mensaje-error-registro" style="color: #e30613; display: none; font-size: 13px; margin-bottom: 10px;"></p>
-                <button type="submit" class="btn-huf" style="width: 100%;">Register</button>
             </form>
         </div>
     </div>
@@ -250,7 +421,7 @@
                     </div>
                     <div class="form-group" style="margin: 0;">
                         <label>Rol:</label>
-                        <select id="nuevo-user-rol">
+                        <select id="nuevo-user-rol" style="width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #ced4da;">
                             <option value="USUARIO">Usuario (Tickets/Búsquedas)</option>
                             <option value="ADMIN">Administrador (Modificar Inventario)</option>
                         </select>
@@ -294,53 +465,72 @@
         </div>
     </div>
 
-    <!-- MODAL AGREGAR / EDITAR PIEZA EN LOCKER -->
-    <div id="modal-editar-pieza" class="modal">
+    <!-- MODAL AGREGAR/EDITAR FIXTURE -->
+    <div id="modal-editar-pieza" class="modal" style="display: none;">
         <div class="modal-contenido">
             <span class="cerrar" onclick="cerrarModal('modal-editar-pieza')">&times;</span>
-            <h2 id="titulo-modal-pieza" class="modal-titulo-huf">Agregar Fixture / Pieza</h2>
+            <h3 id="titulo-modal-pieza" class="modal-titulo-huf">Agregar Fixture</h3>
             <form onsubmit="guardarPiezaLocker(event)">
                 <input type="hidden" id="pieza-locker-id">
                 <input type="hidden" id="pieza-div-id">
-                <input type="hidden" id="pieza-index-id">
-                
+                <input type="hidden" id="pieza-index">
+
                 <div class="form-group">
-                    <label>Tipo de Objeto:</label>
-                    <div style="display: flex; gap: 15px; margin-top: 5px;">
-                        <label style="font-weight: normal;"><input type="radio" name="tipo-objeto" value="Fixture" checked> Fixture</label>
-                        <label style="font-weight: normal;"><input type="radio" name="tipo-objeto" value="Auxiliary"> Auxiliar</label>
-                    </div>
+                    <label>Nombre del Fixture:</label>
+                    <input type="text" id="input-pieza-nombre" required placeholder="Ej. Fixture de Pruebas">
                 </div>
+
                 <div class="form-group">
                     <label>Cliente:</label>
-                    <input type="text" id="input-pieza-cliente" placeholder="Ej: BMW, Volkswagen, Audi...">
+                    <select id="input-pieza-cliente" required>
+                        <option value="">-- Selecciona un cliente --</option>
+                    </select>
                 </div>
+
                 <div class="form-group">
-                    <label>Nombre del Fixture / Equipo:</label>
-                    <input type="text" id="input-pieza-nombre" placeholder="Ej: Fixture F-01 Pruebas" required>
+                    <label>Localidad / Ubicación:</label>
+                    <input type="text" id="input-pieza-localidad" required placeholder="Ej. Planta Puebla - Nave 2 / Estante A">
                 </div>
+
                 <div class="form-group">
-                    <label>Número de Proyecto:</label>
-                    <input type="text" id="input-pieza-proyecto" placeholder="Ej: PRJ-2026-X">
+                    <label>Número de Proyecto (formato 0000.000):</label>
+                    <div class="mascara-proyecto">
+                        <input type="text" id="proj-part1" placeholder="0000" maxlength="4" pattern="\d{4}" required onkeyup="autotab(this, 'proj-part2')">
+                        <span class="separador-punto">.</span>
+                        <input type="text" id="proj-part2" placeholder="003" maxlength="3" pattern="\d{3}" required>
+                    </div>
+                    <input type="hidden" id="input-pieza-proyecto">
                 </div>
+
                 <div class="form-group">
                     <label>Descripción / Observaciones:</label>
-                    <textarea id="input-pieza-desc" rows="3" placeholder="Ej: Arnés de prueba para Huf PUEBLA..."></textarea>
+                    <textarea id="input-pieza-desc" rows="3" placeholder="Detalles de la pieza..."></textarea>
                 </div>
+
                 <div class="form-group">
-                    <label>Fotografía del Fixture (Subir archivo directo):</label>
+                    <label>Fotografía del Fixture:</label>
                     <input type="file" id="input-pieza-foto-file" accept="image/*" onchange="convertirImagenBase64(this)">
                     <input type="hidden" id="input-pieza-foto-base64">
-                    <div id="preview-foto-miniatura" style="margin-top: 10px; display: none;">
-                        <img id="img-pieza-miniatura-prev" class="img-preview-thumb" src="" alt="Vista previa">
-                    </div>
                 </div>
-                <button type="submit" class="btn-huf" style="width: 100%;">Guardar Fixture</button>
+
+                <div id="preview-foto-miniatura" style="display: none; margin-top: 10px; text-align: center;">
+                    <img id="img-pieza-miniatura-prev" src="" style="max-width: 100%; max-height: 120px; border-radius: 6px;">
+                </div>
+
+                <div class="form-group" style="background: #fff5f5; border: 1px solid #ffc9c9; padding: 12px; border-radius: 6px; margin-top: 15px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 0; font-weight: normal;">
+                        <input type="checkbox" id="check-agregar-a-lista-global" style="width: auto; transform: scale(1.3); cursor: pointer;">
+                        <span style="font-size: 13px; color: #e30613; font-weight: 600;">📋 Agregar también a la Lista Global de Fixtures</span>
+                    </label>
+                    <p style="font-size: 11px; color: #6c757d; margin: 6px 0 0 0;">Marca esta casilla si otras plantas deben poder ver este fixture y su ubicación/contacto.</p>
+                </div>
+
+                <button type="submit" class="btn-huf" style="width: 100%; margin-top: 15px;">Guardar Fixture</button>
             </form>
         </div>
     </div>
 
-    <!-- VISOR DE FOTO COMPLETA -->
+    <!-- VISOR FOTO -->
     <div id="modal-visor-foto" class="modal" onclick="cerrarModal('modal-visor-foto')">
         <div class="modal-contenido modal-foto-fullscreen">
             <span class="cerrar" onclick="cerrarModal('modal-visor-foto')">&times;</span>
@@ -402,9 +592,9 @@
     <!-- MODAL EDITAR CANTIDAD -->
     <div id="modal-editar-cantidad-nacho" class="modal">
         <div class="modal-content modal-huf-diseno">
-            <span class="cerrar" onclick="cerrarModal('modal-editar-cantidad-nacho')">&times;</span>
             <div class="modal-header-huf">
                 <h3>Ajustar Inventario</h3>
+                <span class="cerrar" onclick="cerrarModal('modal-editar-cantidad-nacho')">&times;</span>
             </div>
             <div class="modal-body-huf">
                 <p class="subtitulo-material">Material: <strong id="edit-cant-material-nombre" class="texto-destacado-huf">---</strong></p>
@@ -444,9 +634,9 @@
     <!-- MODAL CONFIRMAR ELIMINACIÓN -->
     <div id="modal-confirmar-eliminar-nacho" class="modal">
         <div class="modal-content modal-huf-diseno">
-            <span class="cerrar" onclick="cerrarModal('modal-confirmar-eliminar-nacho')">&times;</span>
             <div class="modal-header-huf">
                 <h3>Confirmar Eliminación</h3>
+                <span class="cerrar" onclick="cerrarModal('modal-confirmar-eliminar-nacho')">&times;</span>
             </div>
             <div class="modal-body-huf">
                 <p class="subtitulo-material">
@@ -460,41 +650,103 @@
         </div>
     </div>
 
-    <!-- MODAL NOTIFICACIÓN IN-APP -->
-    <div id="modal-notificacion-inapp" class="modal">
-        <div class="modal-content modal-huf-diseno" style="max-width: 350px;">
-            <div class="modal-header-huf">
-                <h3 id="notif-titulo">System Notification</h3>
-            </div>
-            <div class="modal-body-huf" style="text-align: center;">
-                <p id="notif-mensaje" class="subtitulo-material">Message</p>
-                <div class="acciones-modal-huf" style="justify-content: center;">
-                    <button type="button" class="btn-huf-guardar" onclick="cerrarModal('modal-notificacion-inapp')">OK</button>
+    <!-- ============================================================ -->
+    <!-- MODAL NUEVO/EDITAR FIXTURE GLOBAL                             -->
+    <!-- ============================================================ -->
+    <div id="modal-fixture-global" class="modal">
+        <div class="modal-contenido modal-ancho">
+            <span class="cerrar" onclick="cerrarModal('modal-fixture-global')">&times;</span>
+            <h2 id="titulo-modal-fixture-global" class="modal-titulo-huf">Agregar Fixture a la Lista Global</h2>
+            <form onsubmit="guardarFixtureGlobal(event)">
+                <input type="hidden" id="fixture-global-id-editar">
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label>Nombre del Fixture: *</label>
+                        <input type="text" id="fg-nombre" required placeholder="Ej: Fixture de Pruebas F-01">
+                    </div>
+                    <div class="form-group">
+                        <label>Cliente: *</label>
+                        <input type="text" id="fg-cliente" required placeholder="Ej: Volkswagen, BMW...">
+                    </div>
                 </div>
-            </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label>País: *</label>
+                        <input type="text" id="fg-pais" required placeholder="Ej: México, Alemania, Brasil...">
+                    </div>
+                    <div class="form-group">
+                        <label>Planta / Ciudad: *</label>
+                        <input type="text" id="fg-planta" required placeholder="Ej: Planta Puebla, Planta Stuttgart...">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Ubicación específica:</label>
+                    <input type="text" id="fg-ubicacion" placeholder="Ej: Nave 2, Estante A, Locker Externo...">
+                </div>
+
+                <div class="form-group">
+                    <label>Número de Proyecto (formato 0000.000):</label>
+                    <input type="text" id="fg-proyecto" placeholder="Ej: 1234.567" pattern="\d{4}\.\d{1,3}">
+                </div>
+
+                <div class="form-group">
+                    <label>Estado del Fixture:</label>
+                    <select id="fg-estado" style="width: 100%; padding: 8px 12px; border-radius: 5px; border: 1px solid #ced4da; background: #f8f9fa;">
+                        <option value="Disponible">Disponible</option>
+                        <option value="En uso">En uso</option>
+                        <option value="En reparación">En reparación</option>
+                        <option value="En tránsito">En tránsito</option>
+                        <option value="Fuera de servicio">Fuera de servicio</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Descripción / Observaciones:</label>
+                    <textarea id="fg-desc" rows="3" placeholder="Detalles del fixture, características, condiciones..."></textarea>
+                </div>
+
+                <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; border: 1px solid #dee2e6; margin-bottom: 15px;">
+                    <h4 style="font-size: 13px; color: #e30613; margin-bottom: 10px;">📞 Contacto en Planta (para otras plantas Huf)</h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div class="form-group" style="margin: 0;">
+                            <label>Nombre del contacto:</label>
+                            <input type="text" id="fg-contacto-nombre" placeholder="Ej: Juan Pérez">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label>Correo o Teléfono:</label>
+                            <input type="text" id="fg-contacto-info" placeholder="Ej: juan@huf.com / +52 222 123 4567">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Fotografía (opcional):</label>
+                    <input type="file" id="fg-foto-file" accept="image/*" onchange="convertirImagenFixtureGlobal(this)">
+                    <input type="hidden" id="fg-foto-base64">
+                </div>
+
+                <div id="fg-preview-foto" style="display: none; margin-top: 10px; text-align: center;">
+                    <img id="fg-img-preview" src="" style="max-width: 100%; max-height: 150px; border-radius: 6px;">
+                </div>
+
+                <button type="submit" class="btn-huf" style="width: 100%; margin-top: 15px;">Guardar Fixture Global</button>
+            </form>
         </div>
     </div>
 
-    <!-- MODAL GUARDADO DUAL (INVENTORY + FIXTURE) -->
-    <div id="modal-confirmar-fixture-dual" class="modal">
-        <div class="modal-content modal-huf-diseno">
-            <div class="modal-header-huf">
-                <h3>Dual Save Confirmation</h3>
-            </div>
-            <div class="modal-body-huf">
-                <p class="subtitulo-material">Do you want to save this object to the global Fixtures list as well?</p>
-                <div class="acciones-modal-huf">
-                    <button type="button" class="btn-huf-cancelar" onclick="procesarGuardadoDual(false)">No, Locker Only</button>
-                    <button type="button" class="btn-huf-guardar" onclick="procesarGuardadoDual(true)">Yes, Save to Fixtures</button>
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    <!-- CARGA UNIFICADA FIREBASE SDK v10 COMPAT -->
+    <!-- SweetAlert2 CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <!-- Firebase Compat Scripts -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <script src="js/app.js"></script>
+
 </body>
 </html>
