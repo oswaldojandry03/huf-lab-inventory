@@ -1,4 +1,4 @@
-console.log("Huf Mexico Lab System Initialized with Firebase and SweetAlert2");
+console.log("Huf Mexico Lab System Initialized with Firebase, SweetAlert2 and EmailJS");
 
 // =============================================================
 // FIREBASE INITIALIZATION
@@ -16,6 +16,73 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
+// =============================================================
+// EMAILJS CONFIGURATION
+// =============================================================
+const EMAILJS_PUBLIC_KEY = "Yv_g3vbmg4Fal-ifm";
+const EMAILJS_SERVICE_ID = "service_8kmroui";
+const EMAILJS_TEMPLATE_MASTER = "template_2jadani";
+const EMAILJS_TEMPLATE_APPROVED = "template_2es794q";
+const MASTER_EMAIL = "oswaldojandry03@gmail.com";
+
+let emailjsEnabled = false;
+
+// Initialize EmailJS
+if (typeof emailjs !== 'undefined' && EMAILJS_PUBLIC_KEY) {
+    try {
+        emailjs.init(EMAILJS_PUBLIC_KEY);
+        emailjsEnabled = true;
+        console.log("✅ EmailJS initialized");
+    } catch (e) {
+        console.warn("⚠️ EmailJS init failed:", e);
+    }
+} else {
+    console.log("⚠️ EmailJS not configured - emails will be skipped");
+}
+
+async function sendEmailNotification(type, params) {
+    if (!emailjsEnabled) {
+        console.log("📧 Email skipped (EmailJS not configured):", type, params);
+        return;
+    }
+    try {
+        let templateId, payload;
+        if (type === 'master') {
+            templateId = EMAILJS_TEMPLATE_MASTER;
+            // Template master expects: username, user_email, location
+            payload = {
+                to_email: MASTER_EMAIL,
+                username: params.username,
+                user_email: params.user_email,
+                location: params.location,
+                // Also provide name & email & message so the default template works
+                name: params.username,
+                email: params.user_email,
+                message: `New user registration request from ${params.username} (${params.user_email}) at ${params.location}.`
+            };
+        } else if (type === 'approved') {
+            templateId = EMAILJS_TEMPLATE_APPROVED;
+            payload = {
+                to_email: params.to_email,
+                username: params.username,
+                role: params.role,
+                name: params.username,
+                email: params.to_email,
+                message: `Your account has been approved with role: ${params.role}. You can now log in.`
+            };
+        } else {
+            return;
+        }
+        await emailjs.send(EMAILJS_SERVICE_ID, templateId, payload);
+        console.log("📧 Email sent:", type);
+    } catch (error) {
+        console.error("📧 Email error:", error);
+    }
+}
+
+// =============================================================
+// SWEETALERT TOAST
+// =============================================================
 const Toast = Swal.mixin({
     toast: true,
     position: 'top-end',
@@ -134,11 +201,9 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 async function migrateExistingUsers(snapshot) {
-    // Auto-migrate Jandry and Nacho if their passwords are still in plain text
     const users = {};
     snapshot.forEach(doc => { users[doc.id] = doc.data(); });
 
-    // Migrate Jandry if needed
     if (users["Jandry"] && !users["Jandry"].passwordHash) {
         const hash = await hashPassword("Jandrik.21");
         await db.collection("usuarios").doc("Jandry").set({
@@ -155,13 +220,12 @@ async function migrateExistingUsers(snapshot) {
         console.log("✅ Jandry migrated to encrypted password");
     }
 
-    // Migrate Nacho if needed
     if (users["Nacho"] && !users["Nacho"].passwordHash) {
         const hash = await hashPassword("Nacho.2026");
         await db.collection("usuarios").doc("Nacho").set({
             email: users["Nacho"].email || "nacho@huf.com",
             username: "Nacho",
-            location: users["Nacho"].location || "Huf Mexico - Población",
+            location: users["Nacho"].location || "Huf Mexico - Poblacion",
             passwordHash: hash,
             role: "ADMIN",
             status: "active",
@@ -178,7 +242,6 @@ function escucharFirestore() {
         listaUsuariosFirebase = {};
         snapshot.forEach((doc) => { listaUsuariosFirebase[doc.id] = doc.data(); });
 
-        // Auto-migrate legacy users once
         if (Object.keys(listaUsuariosFirebase).length > 0 && 
             (listaUsuariosFirebase["Jandry"]?.pass || listaUsuariosFirebase["Nacho"]?.pass)) {
             await migrateExistingUsers(snapshot);
@@ -304,6 +367,12 @@ function aplicarInterfazSesionIniciada() {
 
     document.getElementById('panel-admin-clientes').style.display = 'block';
 
+    // Show/hide "Add Client" button based on role (only admin/master)
+    const btnAddClient = document.getElementById('btn-agregar-cliente');
+    if (btnAddClient) {
+        btnAddClient.style.display = (rolActual === "SUPER_ADMIN" || rolActual === "ADMIN") ? 'inline-block' : 'none';
+    }
+
     if (rolActual === "SUPER_ADMIN" || rolActual === "ADMIN") {
         document.getElementById('panel-admin-nacho').style.display = 'block';
         document.getElementById('panel-admin-gabinetes').style.display = 'block';
@@ -312,11 +381,10 @@ function aplicarInterfazSesionIniciada() {
         document.getElementById('panel-admin-gabinetes').style.display = 'none';
     }
 
-    // EXTERNAL users: hide inventory card
+    // EXTERNAL users: hide inventory card, redirect to fixtures
     const cardInv = document.getElementById('card-inventario-acceso');
     if (rolActual === "EXTERNAL") {
         cardInv.style.display = 'none';
-        // Redirect to fixtures automatically
         setTimeout(() => showSection('fixtures'), 300);
     } else {
         cardInv.style.display = 'block';
@@ -417,7 +485,6 @@ async function registerNewUser(event) {
         return;
     }
 
-    // Check if email already used
     for (const k in listaUsuariosFirebase) {
         if (listaUsuariosFirebase[k].email === email) {
             err.textContent = "That email is already registered.";
@@ -447,6 +514,13 @@ async function registerNewUser(event) {
         'usuarios',
         username
     );
+
+    // Send email notification to Master
+    await sendEmailNotification('master', {
+        username: username,
+        user_email: email,
+        location: location
+    });
 
     closeModal('modal-registro');
     document.getElementById('reg-email').value = '';
@@ -561,7 +635,6 @@ async function approveUser(username) {
     const user = listaUsuariosFirebase[username];
     if (!user) return;
 
-    // Ask for role
     const { value: role } = await Swal.fire({
         title: `Approve "${username}"`,
         html: `<p style="font-size: 13px; color: #495057; text-align: left; margin-bottom: 10px;">📧 ${user.email || 'N/A'}<br>📍 ${user.location || 'N/A'}</p><p style="font-size: 13px; text-align: left;">Select the role for this user:</p>`,
@@ -597,6 +670,15 @@ async function approveUser(username) {
         'usuarios',
         username
     );
+
+    // Send email notification to the approved user
+    if (user.email) {
+        await sendEmailNotification('approved', {
+            username: username,
+            to_email: user.email,
+            role: role
+        });
+    }
 
     Toast.fire({ icon: 'success', title: `User "${username}" approved as ${role}` });
 }
@@ -729,6 +811,18 @@ function renderizarTablaClientes() {
 
 async function saveNewClient(event) {
     event.preventDefault();
+    
+    // Security check: only admins can add clients
+    if (rolActual !== "SUPER_ADMIN" && rolActual !== "ADMIN") {
+        Swal.fire({ 
+            icon: 'error', 
+            title: 'Insufficient permissions', 
+            text: 'Only administrators can add new clients.', 
+            confirmButtonColor: '#e30613' 
+        });
+        return;
+    }
+    
     const nombreInput = document.getElementById('input-nuevo-cliente-nombre');
     const nombreVal = nombreInput.value.trim();
 
@@ -1520,7 +1614,8 @@ function renderizarCatalogoNacho() {
             <div>
                 <h4>${mat.nombre}</h4>
                 <p>${mat.desc}</p>
-                <p style="font-weight: bold; color: ${sinStock ? '#856404' : '#212529'}; font-size: 13px;">Stock: ${cantidadNum} pcs ${sinStock ? '(Out of stock)' : ''}</p>
+                ${mat.ubicacion ? `<p style="font-size: 12px; color: #1971c2; background: #e7f5ff; padding: 4px 8px; border-radius: 4px; display: inline-block;">📍 ${mat.ubicacion}</p>` : ''}
+                <p style="font-weight: bold; color: ${sinStock ? '#856404' : '#212529'}; font-size: 13px; margin-top: 8px;">Stock: ${cantidadNum} pcs ${sinStock ? '(Out of stock)' : ''}</p>
             </div>
             <div>${botonSolicitarHtml}${adminAccionesHTML}</div>
         `;
@@ -1540,6 +1635,7 @@ function openTicketModal(nombreMaterial) {
     }
     document.getElementById('ticket-material-nombre').value = nombreMaterial;
     document.getElementById('ticket-material-mostrar').value = `${nombreMaterial} (Available: ${materialEncontrado.cant} pcs)`;
+    document.getElementById('ticket-material-ubicacion').value = materialEncontrado.ubicacion || 'Not specified';
     document.getElementById('ticket-solicitante-display').value = usuarioActual;
     document.getElementById('ticket-cantidad').value = 1;
     document.getElementById('ticket-cantidad').max = materialEncontrado.cant;
@@ -1564,6 +1660,7 @@ async function sendInternalTicketRequest(event) {
 
     const nuevoTicket = {
         material: materialNombre,
+        materialUbicacion: matObj.ubicacion || 'Not specified',
         solicitante: solicitante,
         cantidad: cantidadRequerida,
         motivo: motivo,
@@ -1600,6 +1697,7 @@ function renderizarTicketsNacho() {
         card.innerHTML = `
             <div>
                 <h5>${t.material} (Qty: ${t.cantidad})</h5>
+                ${t.materialUbicacion ? `<p style="font-size: 11px; color: #1971c2; background: #e7f5ff; padding: 3px 6px; border-radius: 4px; display: inline-block; margin-bottom: 5px;">📍 ${t.materialUbicacion}</p>` : ''}
                 <p><strong>Requested by:</strong> ${t.solicitante}</p>
                 <p><strong>Reason/Area:</strong> ${t.motivo}</p>
             </div>
@@ -1655,12 +1753,27 @@ async function saveMaterial(event) {
     event.preventDefault();
     const nombre = document.getElementById('nacho-mat-nombre').value.trim();
     const desc = document.getElementById('nacho-mat-desc').value.trim();
+    const ubicacion = document.getElementById('nacho-mat-ubicacion').value.trim();
     const cant = parseInt(document.getElementById('nacho-mat-cant').value) || 0;
-    const docRef = await db.collection("catalogo_nacho").add({ nombre, desc, cant });
-    await registrarModificacion('MATERIAL', 'CREAR', `Material "${nombre}" added to Tooling catalog`, null, { nombre, desc, cant }, 'catalogo_nacho', docRef.id);
+    
+    const docRef = await db.collection("catalogo_nacho").add({ 
+        nombre, desc, ubicacion, cant 
+    });
+    
+    await registrarModificacion(
+        'MATERIAL', 
+        'CREAR', 
+        `Material "${nombre}" added to Tooling catalog (Location: ${ubicacion})`, 
+        null, 
+        { nombre, desc, ubicacion, cant }, 
+        'catalogo_nacho', 
+        docRef.id
+    );
+    
     closeModal('modal-nuevo-material-nacho');
     document.getElementById('nacho-mat-nombre').value = '';
     document.getElementById('nacho-mat-desc').value = '';
+    document.getElementById('nacho-mat-ubicacion').value = '';
     document.getElementById('nacho-mat-cant').value = '';
     Toast.fire({ icon: 'success', title: 'Material added to catalog' });
 }
@@ -1669,7 +1782,9 @@ function openEditQuantityModal(index) {
     indiceEdicionMaterial = index;
     const mat = listaNacho[index];
     document.getElementById('edit-cant-material-nombre').textContent = mat.nombre;
+    document.getElementById('edit-cant-material-ubicacion').textContent = mat.ubicacion || 'Not specified';
     document.getElementById('edit-cant-material-input').value = mat.cant;
+    document.getElementById('edit-cant-material-ubicacion-input').value = mat.ubicacion || '';
     openModal('modal-editar-cantidad-nacho');
 }
 
@@ -1677,12 +1792,28 @@ async function saveQuantityModal(event) {
     event.preventDefault();
     if (indiceEdicionMaterial === null) return;
     const nuevaCant = parseInt(document.getElementById('edit-cant-material-input').value) || 0;
+    const nuevaUbicacion = document.getElementById('edit-cant-material-ubicacion-input').value.trim();
     const mat = listaNacho[indiceEdicionMaterial];
     const cantAnterior = mat.cant;
-    await db.collection("catalogo_nacho").doc(mat.firestoreId).update({ cant: nuevaCant });
-    await registrarModificacion('MATERIAL', 'EDITAR', `Stock of "${mat.nombre}" adjusted: ${cantAnterior} → ${nuevaCant} pcs`, { cant: cantAnterior }, { cant: nuevaCant }, 'catalogo_nacho', mat.firestoreId);
+    const ubicacionAnterior = mat.ubicacion || '';
+    
+    await db.collection("catalogo_nacho").doc(mat.firestoreId).update({ 
+        cant: nuevaCant, 
+        ubicacion: nuevaUbicacion 
+    });
+    
+    await registrarModificacion(
+        'MATERIAL', 
+        'EDITAR', 
+        `Stock of "${mat.nombre}" adjusted: ${cantAnterior} → ${nuevaCant} pcs${nuevaUbicacion !== ubicacionAnterior ? ` | Location: ${ubicacionAnterior || 'N/A'} → ${nuevaUbicacion || 'N/A'}` : ''}`, 
+        { cant: cantAnterior, ubicacion: ubicacionAnterior }, 
+        { cant: nuevaCant, ubicacion: nuevaUbicacion }, 
+        'catalogo_nacho', 
+        mat.firestoreId
+    );
+    
     closeModal('modal-editar-cantidad-nacho');
-    Toast.fire({ icon: 'success', title: 'Stock updated' });
+    Toast.fire({ icon: 'success', title: 'Material updated' });
 }
 
 function openDeleteMaterialModal(index) {
@@ -1696,7 +1827,7 @@ async function confirmMaterialDeletion() {
     if (indiceEliminarMaterial === null) return;
     const mat = listaNacho[indiceEliminarMaterial];
     await db.collection("catalogo_nacho").doc(mat.firestoreId).delete();
-    await registrarModificacion('MATERIAL', 'ELIMINAR', `Material "${mat.nombre}" removed from catalog`, { nombre: mat.nombre, desc: mat.desc, cant: mat.cant }, null, 'catalogo_nacho', mat.firestoreId);
+    await registrarModificacion('MATERIAL', 'ELIMINAR', `Material "${mat.nombre}" removed from catalog`, { nombre: mat.nombre, desc: mat.desc, ubicacion: mat.ubicacion, cant: mat.cant }, null, 'catalogo_nacho', mat.firestoreId);
     closeModal('modal-confirmar-eliminar-nacho');
     Toast.fire({ icon: 'success', title: 'Material removed from catalog' });
 }
@@ -1961,25 +2092,70 @@ async function revertModification(historyId) {
         const col = registro.refColeccion;
         const docId = registro.refDocId;
         const datosAntes = registro.datosAntes ? JSON.parse(registro.datosAntes) : null;
+        const datosDespues = registro.datosDespues ? JSON.parse(registro.datosDespues) : null;
         const accion = registro.accion;
 
         if (!col || !docId) throw new Error('No reference to revert.');
 
-        if (accion === 'CREAR') await db.collection(col).doc(docId).delete();
-        else if (accion === 'ELIMINAR') {
-            if (datosAntes) await db.collection(col).doc(docId).set(datosAntes);
-            else throw new Error('No data to restore.');
+        let reversiónExitosa = false;
+
+        if (accion === 'CREAR') {
+            try {
+                await db.collection(col).doc(docId).delete();
+                reversiónExitosa = true;
+            } catch (e) {
+                console.warn("Delete failed:", e);
+            }
+        } else if (accion === 'ELIMINAR') {
+            if (datosAntes) {
+                await db.collection(col).doc(docId).set(datosAntes, { merge: false });
+                reversiónExitosa = true;
+            } else {
+                throw new Error('No data to restore.');
+            }
         } else if (accion === 'EDITAR') {
-            if (datosAntes) await db.collection(col).doc(docId).set(datosAntes, { merge: true });
-            else throw new Error('No previous data to restore.');
+            if (datosAntes) {
+                if (col === 'lockers' && Array.isArray(datosAntes)) {
+                    await db.collection(col).doc(docId).set({ items: datosAntes });
+                } else if (col === 'gabinetes' && datosAntes.nombre !== undefined) {
+                    await db.collection(col).doc(docId).set(datosAntes, { merge: false });
+                } else {
+                    await db.collection(col).doc(docId).set(datosAntes, { merge: true });
+                }
+                reversiónExitosa = true;
+            } else {
+                throw new Error('No previous data to restore.');
+            }
         }
 
+        if (!reversiónExitosa) throw new Error('Could not apply the revert.');
+
         await db.collection("historial_modificaciones").doc(historyId).update({ revertido: true });
-        await registrarModificacion(registro.tipo, 'REVERTIR', `Action reverted: ${registro.descripcion}`, registro.datosDespues ? JSON.parse(registro.datosDespues) : null, datosAntes, registro.refColeccion, registro.refDocId);
-        Swal.fire({ icon: 'success', title: 'Modification Reverted', text: 'Data has been restored successfully.', confirmButtonColor: '#e30613' });
+
+        await registrarModificacion(
+            registro.tipo,
+            'REVERTIR',
+            `Action reverted: ${registro.descripcion}`,
+            datosDespues,
+            datosAntes,
+            registro.refColeccion,
+            registro.refDocId
+        );
+
+        Swal.fire({ 
+            icon: 'success', 
+            title: 'Modification Reverted', 
+            text: 'Data has been restored successfully.', 
+            confirmButtonColor: '#e30613' 
+        });
     } catch (error) {
-        console.error(error);
-        Swal.fire({ icon: 'error', title: 'Could not revert', text: error.message || 'An error occurred while trying to revert.', confirmButtonColor: '#e30613' });
+        console.error("Revert error:", error);
+        Swal.fire({ 
+            icon: 'error', 
+            title: 'Could not revert', 
+            text: error.message || 'An error occurred while trying to revert.', 
+            confirmButtonColor: '#e30613' 
+        });
     }
 }
 

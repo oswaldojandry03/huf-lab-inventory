@@ -104,7 +104,7 @@
                         <summary class="summary-huf">Registered Clients</summary>
                         <div style="display: flex; justify-content: space-between; align-items: center; margin: 15px 0 10px 0; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px;">
                             <span style="font-size: 13px; font-weight: bold; color: #495057;">Active Client List</span>
-                            <button class="btn-huf-secundario" style="font-size: 12px; padding: 6px 12px;" onclick="openModal('modal-nuevo-cliente')">+ Add Client</button>
+                            <button id="btn-agregar-cliente" class="btn-huf-secundario" style="font-size: 12px; padding: 6px 12px; display: none;" onclick="openModal('modal-nuevo-cliente')">+ Add Client</button>
                         </div>
                         <div id="lista-clientes-sistema" class="contenedor-clientes-lista"></div>
                     </details>
@@ -220,9 +220,7 @@
             </main>
         </div>
 
-        <!-- ============================================================ -->
-        <!-- GLOBAL FIXTURES LIST SECTION                                 -->
-        <!-- ============================================================ -->
+        <!-- GLOBAL FIXTURES LIST SECTION -->
         <div id="seccion-lista-fixtures" style="display: none;">
             <div style="padding: 10px 25px 0 25px; max-width: 1400px; margin: 0 auto;">
                 <button class="btn-huf-secundario" onclick="backToMainMenu()" style="display: flex; align-items: center; gap: 8px;">
@@ -567,6 +565,10 @@
                     <input type="text" id="ticket-material-mostrar" disabled>
                 </div>
                 <div class="form-group">
+                    <label>📍 Location (where to find it):</label>
+                    <input type="text" id="ticket-material-ubicacion" disabled style="background-color: #e7f5ff; font-weight: bold; color: #1971c2;">
+                </div>
+                <div class="form-group">
                     <label>Requested by:</label>
                     <input type="text" id="ticket-solicitante-display" disabled style="background-color: #e9ecef; font-weight: bold; color: #e30613;">
                 </div>
@@ -598,6 +600,10 @@
                     <input type="text" id="nacho-mat-desc" required>
                 </div>
                 <div class="form-group">
+                    <label>Material Location (where to find it):</label>
+                    <input type="text" id="nacho-mat-ubicacion" placeholder="Ex: Tooling Room - Shelf 3 - Box A" required>
+                </div>
+                <div class="form-group">
                     <label>Available Quantity:</label>
                     <input type="number" id="nacho-mat-cant" required>
                 </div>
@@ -615,6 +621,7 @@
             </div>
             <div class="modal-body-huf">
                 <p class="subtitulo-material">Material: <strong id="edit-cant-material-nombre" class="texto-destacado-huf">---</strong></p>
+                <p class="subtitulo-material">📍 Location: <strong id="edit-cant-material-ubicacion" class="texto-destacado-huf">---</strong></p>
                 <form onsubmit="saveQuantityModal(event)">
                     <div class="form-group-huf">
                         <label for="edit-cant-material-input">New Available Quantity:</label>
@@ -622,6 +629,10 @@
                             <input type="number" id="edit-cant-material-input" min="0" required class="input-huf-custom">
                             <span class="unidad-tag">pcs/rolls</span>
                         </div>
+                    </div>
+                    <div class="form-group-huf">
+                        <label for="edit-cant-material-ubicacion-input">Material Location:</label>
+                        <input type="text" id="edit-cant-material-ubicacion-input" class="input-huf-custom" placeholder="Ex: Tooling Room - Shelf 3">
                     </div>
                     <div class="acciones-modal-huf">
                         <button type="button" class="btn-huf-cancelar" onclick="closeModal('modal-editar-cantidad-nacho')">Cancel</button>
@@ -751,6 +762,9 @@
             </form>
         </div>
     </div>
+
+    <!-- EmailJS CDN -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
