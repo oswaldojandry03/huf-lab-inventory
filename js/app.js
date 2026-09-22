@@ -27,7 +27,6 @@ const MASTER_EMAIL = "oswaldojandry03@gmail.com";
 
 let emailjsEnabled = false;
 
-// Initialize EmailJS
 if (typeof emailjs !== 'undefined' && EMAILJS_PUBLIC_KEY) {
     try {
         emailjs.init(EMAILJS_PUBLIC_KEY);
@@ -49,13 +48,11 @@ async function sendEmailNotification(type, params) {
         let templateId, payload;
         if (type === 'master') {
             templateId = EMAILJS_TEMPLATE_MASTER;
-            // Template master expects: username, user_email, location
             payload = {
                 to_email: MASTER_EMAIL,
                 username: params.username,
                 user_email: params.user_email,
                 location: params.location,
-                // Also provide name & email & message so the default template works
                 name: params.username,
                 email: params.user_email,
                 message: `New user registration request from ${params.username} (${params.user_email}) at ${params.location}.`
@@ -367,13 +364,27 @@ function aplicarInterfazSesionIniciada() {
 
     document.getElementById('panel-admin-clientes').style.display = 'block';
 
-    // Show/hide "Add Client" button based on role (only admin/master)
+    const esAdmin = (rolActual === "SUPER_ADMIN" || rolActual === "ADMIN");
+
+    // Show/hide "Add Client" button based on role (inventory)
     const btnAddClient = document.getElementById('btn-agregar-cliente');
     if (btnAddClient) {
-        btnAddClient.style.display = (rolActual === "SUPER_ADMIN" || rolActual === "ADMIN") ? 'inline-block' : 'none';
+        btnAddClient.style.display = esAdmin ? 'inline-block' : 'none';
     }
 
-    if (rolActual === "SUPER_ADMIN" || rolActual === "ADMIN") {
+    // Show/hide "Add Client" button in global fixtures list
+    const btnAddClientList = document.getElementById('btn-agregar-cliente-lista-global');
+    if (btnAddClientList) {
+        btnAddClientList.style.display = esAdmin ? 'inline-block' : 'none';
+    }
+
+    // Show/hide History tab (admin only)
+    const btnHistory = document.getElementById('btn-tab-history');
+    if (btnHistory) {
+        btnHistory.style.display = esAdmin ? 'inline-block' : 'none';
+    }
+
+    if (esAdmin) {
         document.getElementById('panel-admin-nacho').style.display = 'block';
         document.getElementById('panel-admin-gabinetes').style.display = 'block';
     } else {
@@ -515,7 +526,6 @@ async function registerNewUser(event) {
         username
     );
 
-    // Send email notification to Master
     await sendEmailNotification('master', {
         username: username,
         user_email: email,
@@ -671,7 +681,6 @@ async function approveUser(username) {
         username
     );
 
-    // Send email notification to the approved user
     if (user.email) {
         await sendEmailNotification('approved', {
             username: username,
@@ -766,14 +775,27 @@ async function deleteUser(username) {
 // =============================================================
 function poblarSelectClientes() {
     const select = document.getElementById('input-pieza-cliente');
-    if (!select) return;
-    select.innerHTML = '<option value="">-- Select a client --</option>';
-    listaClientesFirebase.forEach((c) => {
-        const option = document.createElement('option');
-        option.value = c.nombre;
-        option.textContent = c.nombre;
-        select.appendChild(option);
-    });
+    if (select) {
+        select.innerHTML = '<option value="">-- Select a client --</option>';
+        listaClientesFirebase.forEach((c) => {
+            const option = document.createElement('option');
+            option.value = c.nombre;
+            option.textContent = c.nombre;
+            select.appendChild(option);
+        });
+    }
+
+    // Also populate the global fixture client select
+    const selectGlobal = document.getElementById('fg-cliente');
+    if (selectGlobal) {
+        selectGlobal.innerHTML = '<option value="">-- Select a client --</option>';
+        listaClientesFirebase.forEach((c) => {
+            const option = document.createElement('option');
+            option.value = c.nombre;
+            option.textContent = c.nombre;
+            selectGlobal.appendChild(option);
+        });
+    }
 }
 
 function renderizarTablaClientes() {
@@ -812,7 +834,6 @@ function renderizarTablaClientes() {
 async function saveNewClient(event) {
     event.preventDefault();
     
-    // Security check: only admins can add clients
     if (rolActual !== "SUPER_ADMIN" && rolActual !== "ADMIN") {
         Swal.fire({ 
             icon: 'error', 
@@ -2192,6 +2213,8 @@ function openNewGlobalFixtureModal() {
     document.getElementById('fg-pais').value = '';
     document.getElementById('fg-planta').value = '';
     document.getElementById('fg-ubicacion').value = '';
+    document.getElementById('fg-proj-part1').value = '';
+    document.getElementById('fg-proj-part2').value = '';
     document.getElementById('fg-proyecto').value = '';
     document.getElementById('fg-estado').value = 'Available';
     document.getElementById('fg-desc').value = '';
@@ -2212,7 +2235,13 @@ function openNewGlobalFixtureFromLocker(piezaData, letra, divNum) {
     document.getElementById('fg-nombre').value = piezaData.nombre || '';
     document.getElementById('fg-cliente').value = piezaData.cliente || '';
     document.getElementById('fg-ubicacion').value = piezaData.localidad || '';
-    document.getElementById('fg-proyecto').value = piezaData.proyecto || '';
+    
+    if (piezaData.proyecto && piezaData.proyecto.includes('.')) {
+        const partes = piezaData.proyecto.split('.');
+        document.getElementById('fg-proj-part1').value = partes[0] || '';
+        document.getElementById('fg-proj-part2').value = partes[1] || '';
+    }
+    
     document.getElementById('fg-desc').value = piezaData.desc || '';
     document.getElementById('fg-foto-base64').value = piezaData.foto || '';
     
@@ -2237,7 +2266,16 @@ function openEditGlobalFixtureModal(firestoreId) {
     document.getElementById('fg-pais').value = fx.pais || '';
     document.getElementById('fg-planta').value = fx.planta || '';
     document.getElementById('fg-ubicacion').value = fx.ubicacion || '';
-    document.getElementById('fg-proyecto').value = fx.proyecto || '';
+    
+    if (fx.proyecto && fx.proyecto.includes('.')) {
+        const partes = fx.proyecto.split('.');
+        document.getElementById('fg-proj-part1').value = partes[0] || '';
+        document.getElementById('fg-proj-part2').value = partes[1] || '';
+    } else {
+        document.getElementById('fg-proj-part1').value = '';
+        document.getElementById('fg-proj-part2').value = '';
+    }
+    
     document.getElementById('fg-estado').value = fx.estado || 'Available';
     document.getElementById('fg-desc').value = fx.desc || '';
     document.getElementById('fg-contacto-nombre').value = fx.contactoNombre || '';
@@ -2274,13 +2312,17 @@ async function saveGlobalFixture(event) {
     const idExistente = document.getElementById('fixture-global-id-editar').value;
     const docId = idExistente ? idExistente : `FG_${Date.now()}`;
 
+    const part1 = document.getElementById('fg-proj-part1').value.trim();
+    const part2 = document.getElementById('fg-proj-part2').value.trim();
+    const proyectoCompleto = `${part1}.${part2}`;
+
     const datosFixture = {
         nombre: document.getElementById('fg-nombre').value.trim(),
-        cliente: document.getElementById('fg-cliente').value.trim(),
+        cliente: document.getElementById('fg-cliente').value,
         pais: document.getElementById('fg-pais').value.trim(),
         planta: document.getElementById('fg-planta').value.trim(),
         ubicacion: document.getElementById('fg-ubicacion').value.trim(),
-        proyecto: document.getElementById('fg-proyecto').value.trim(),
+        proyecto: proyectoCompleto,
         estado: document.getElementById('fg-estado').value,
         desc: document.getElementById('fg-desc').value.trim(),
         contactoNombre: document.getElementById('fg-contacto-nombre').value.trim(),
