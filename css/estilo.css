@@ -1078,3 +1078,149 @@ header {
     max-height: calc(100vh - 40px);
     overflow-y: auto;
 }
+
+/* ============================================================ */
+/* RACKS & COUPONS MODULE                                        */
+/* ============================================================ */
+#tab-racks .rack-card {
+    background: #ffffff;
+    border: 2px solid #e9ecef;
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+    position: relative;
+}
+
+#tab-racks .rack-card:hover {
+    border-color: #e30613;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(227, 6, 19, 0.15);
+}
+
+#tab-racks .rack-card h3 {
+    color: #e30613;
+    margin-bottom: 5px;
+    font-size: 18px;
+}
+
+#tab-racks .rack-card .rack-levels {
+    font-size: 12px;
+    color: #6c757d;
+    margin-bottom: 8px;
+}
+
+#tab-racks .rack-card .rack-count {
+    margin-top: 8px;
+    font-weight: bold;
+    color: #212529;
+    font-size: 13px;
+    background: #f8f9fa;
+    padding: 6px;
+    border-radius: 6px;
+}
+
+#tab-racks .rack-actions {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+#tab-racks .rack-card:hover .rack-actions {
+    opacity: 1;
+}
+
+#tab-racks .rack-actions button {
+    background: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+#tab-racks .rack-actions button:hover {
+    background: #e30613;
+    color: #ffffff;
+    border-color: #e30613;
+}
+
+/* ============================================================ */
+/* LOCKER CARD WITH ADMIN ACTIONS (igual que rack-card)         */
+/* ============================================================ */
+#tab-lockers .locker-card {
+    background: #ffffff;
+    border: 2px solid #e9ecef;
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+    position: relative;
+}
+
+#tab-lockers .locker-card:hover {
+    border-color: #e30613;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(227, 6, 19, 0.15);
+}
+
+#tab-lockers .locker-card h3 {
+    color: #e30613;
+    margin-bottom: 5px;
+    font-size: 18px;
+}
+
+#tab-lockers .locker-card .locker-levels {
+    font-size: 12px;
+    color: #6c757d;
+    margin-bottom: 8px;
+}
+
+#tab-lockers .locker-card .locker-count {
+    margin-top: 8px;
+    font-weight: bold;
+    color: #212529;
+    font-size: 13px;
+    background: #f8f9fa;
+    padding: 6px;
+    border-radius: 6px;
+}
+
+#tab-lockers .locker-actions {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+#tab-lockers .locker-card:hover .locker-actions {
+    opacity: 1;
+}
+
+#tab-lockers .locker-actions button {
+    background: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+#tab-lockers .locker-actions button:hover {
+    background: #e30613;
+    color: #ffffff;
+    border-color: #e30613;
+}

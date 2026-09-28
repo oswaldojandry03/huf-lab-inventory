@@ -18,6 +18,7 @@
         <nav class="nav-tabs" id="nav-tabs-container" style="display: none;">
             <button class="btn-tab activo" onclick="changeTab(event, 'tab-cabinets')">Cabinets</button>
             <button class="btn-tab" onclick="changeTab(event, 'tab-lockers')">Lockers / Fixtures</button>
+            <button class="btn-tab" onclick="changeTab(event, 'tab-racks')">Coupons &amp; Racks</button>
             <button class="btn-tab" onclick="changeTab(event, 'tab-materials')">Materials</button>
             <button class="btn-tab" onclick="changeTab(event, 'tab-charts'); updateCharts();">Charts</button>
             <button class="btn-tab" id="btn-tab-history" onclick="changeTab(event, 'tab-history'); renderModificationHistory();">History</button>
@@ -116,12 +117,31 @@
                         <input type="text" id="buscar-locker" placeholder="Ex: Fixture F-01, Test Base, Puebla...">
                         <button type="submit" class="btn-huf">Search in Lockers</button>
                     </form>
-                </div> 
+                    <div id="panel-admin-lockers" style="margin-top: 15px; display: none;">
+                        <button class="btn-huf-secundario" onclick="openCreateLockerModal()">+ Create New Locker</button>
+                    </div>
+                </div>
 
                 <div class="grid-lockers-tarjetas" id="contenedor-lockers"></div>
             </main>
 
-            <!-- TAB 3: MATERIALS -->
+            <!-- TAB 3: COUPONS & RACKS (NUEVO) -->
+            <main id="tab-racks" class="tab-content">
+                <div class="buscador-container">
+                    <h3>Search Coupons and Racks</h3>
+                    <form class="barra-busqueda" onsubmit="searchRacks(event)">
+                        <input type="text" id="buscar-rack" placeholder="Ex: Coupon C-01, Rack A, Puebla...">
+                        <button type="submit" class="btn-huf">Search in Racks</button>
+                    </form>
+                    <div id="panel-admin-racks" style="margin-top: 15px; display: none;">
+                        <button class="btn-huf-secundario" onclick="openCreateRackModal()">+ Create New Rack</button>
+                    </div>
+                </div> 
+
+                <div class="grid-lockers-tarjetas" id="contenedor-racks"></div>
+            </main>
+
+            <!-- TAB 4: MATERIALS -->
             <main id="tab-materials" class="tab-content">
                 <section class="seccion-tickets-nacho">
                     <div class="header-solicitudes">
@@ -147,7 +167,7 @@
                 <div class="catalogo-grid" id="catalogo-nacho"></div>
             </main>
 
-            <!-- TAB 4: CHARTS -->
+            <!-- TAB 5: CHARTS -->
             <main id="tab-charts" class="tab-content">
                 <div class="buscador-container">
                     <h3>Inventory Statistics &amp; Metrics</h3>
@@ -189,7 +209,7 @@
                 </div>
             </main>
 
-            <!-- TAB 5: HISTORY -->
+            <!-- TAB 6: HISTORY -->
             <main id="tab-history" class="tab-content">
                 <div class="buscador-container">
                     <h3>System Modification History</h3>
@@ -204,6 +224,7 @@
                                 <option value="">All types</option>
                                 <option value="GABINETE">Cabinets</option>
                                 <option value="LOCKER">Lockers / Fixtures</option>
+                                <option value="RACK">Coupons / Racks</option>
                                 <option value="CLIENTE">Clients</option>
                                 <option value="MATERIAL">Materials</option>
                                 <option value="TICKET">Tickets</option>
@@ -377,6 +398,52 @@
         </div>
     </div>
 
+    <!-- MODAL: CREATE/EDIT RACK (NUEVO) -->
+    <div id="modal-nuevo-rack" class="modal">
+        <div class="modal-contenido">
+            <span class="cerrar" onclick="closeModal('modal-nuevo-rack')">&times;</span>
+            <h2 id="titulo-modal-rack" class="modal-titulo-huf">Configure Rack</h2>
+            <form onsubmit="saveRackStructure(event)">
+                <input type="hidden" id="rack-id-editar">
+                
+                <div class="form-group">
+                    <label>Rack Name:</label>
+                    <input type="text" id="rack-nombre-input" placeholder="Ex: Rack A, Rack B..." required>
+                </div>
+
+                <div class="form-group">
+                    <label>Number of Levels:</label>
+                    <input type="number" id="rack-niveles-input" min="1" max="20" value="3" required>
+                </div>
+
+                <button type="submit" class="btn-huf" style="width: 100%; margin-top: 15px;">Save Rack</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: CREATE/EDIT LOCKER (NUEVO) -->
+    <div id="modal-nuevo-locker" class="modal">
+        <div class="modal-contenido">
+            <span class="cerrar" onclick="closeModal('modal-nuevo-locker')">&times;</span>
+            <h2 id="titulo-modal-locker" class="modal-titulo-huf">Configure Locker</h2>
+            <form onsubmit="saveLockerStructure(event)">
+                <input type="hidden" id="locker-id-editar">
+                
+                <div class="form-group">
+                    <label>Locker Name:</label>
+                    <input type="text" id="locker-nombre-input" placeholder="Ex: Locker A, Locker B..." required>
+                </div>
+
+                <div class="form-group">
+                    <label>Number of Compartments:</label>
+                    <input type="number" id="locker-niveles-input" min="1" max="20" value="5" required>
+                </div>
+
+                <button type="submit" class="btn-huf" style="width: 100%; margin-top: 15px;">Save Locker</button>
+            </form>
+        </div>
+    </div>
+
     <!-- MODAL: LOGIN -->
     <div id="modal-login" class="modal">
         <div class="modal-contenido">
@@ -483,6 +550,15 @@
         </div>
     </div>
 
+    <!-- MODAL: RACK DETAIL (NUEVO) -->
+    <div id="modal-rack-detalle" class="modal">
+        <div class="modal-contenido modal-ancho">
+            <span class="cerrar" onclick="closeModal('modal-rack-detalle')">&times;</span>
+            <h2 id="titulo-modal-rack-detalle" class="modal-titulo-huf">Rack A</h2>
+            <div id="contenido-niveles-rack" class="lista-estantes-container"></div>
+        </div>
+    </div>
+
     <!-- MODAL: ADD/EDIT FIXTURE -->
     <div id="modal-editar-pieza" class="modal" style="display: none;">
         <div class="modal-contenido">
@@ -551,6 +627,65 @@
                 </div>
 
                 <button type="submit" class="btn-huf" style="width: 100%; margin-top: 15px;">Save Fixture</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: ADD/EDIT RACK PIECE (NUEVO) -->
+    <div id="modal-editar-pieza-rack" class="modal" style="display: none;">
+        <div class="modal-contenido">
+            <span class="cerrar" onclick="closeModal('modal-editar-pieza-rack')">&times;</span>
+            <h3 id="titulo-modal-pieza-rack" class="modal-titulo-huf">Add Coupon</h3>
+            <form onsubmit="saveRackPiece(event)">
+                <input type="hidden" id="rack-pieza-rack-id">
+                <input type="hidden" id="rack-pieza-nivel-id">
+                <input type="hidden" id="rack-pieza-index">
+
+                <div class="form-group">
+                    <label>Coupon / Fixture Name:</label>
+                    <input type="text" id="rack-pieza-nombre" required placeholder="Ex. Coupon C-01">
+                </div>
+
+                <div class="form-group">
+                    <label>Client:</label>
+                    <select id="rack-pieza-cliente" required>
+                        <option value="">-- Select a client --</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Project Number (format 0000.000) - Optional:</label>
+                    <div class="mascara-proyecto">
+                        <input type="text" id="rack-proj-part1" placeholder="0000" maxlength="4" pattern="\d{4}"
+                               title="Please enter exactly 4 digits (0-9)"
+                               oninvalid="this.setCustomValidity('Please enter exactly 4 digits (0-9)')"
+                               oninput="this.setCustomValidity('')"
+                               onkeyup="autotab(this, 'rack-proj-part2')">
+                        <span class="separador-punto">.</span>
+                        <input type="text" id="rack-proj-part2" placeholder="003" maxlength="3" pattern="\d{3}"
+                               title="Please enter exactly 3 digits (0-9)"
+                               oninvalid="this.setCustomValidity('Please enter exactly 3 digits (0-9)')"
+                               oninput="this.setCustomValidity('')">
+                    </div>
+                    <input type="hidden" id="rack-pieza-proyecto">
+                </div>
+
+                <div class="form-group">
+                    <label>Description / Notes:</label>
+                    <textarea id="rack-pieza-desc" rows="3" placeholder="Coupon details..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Photo:</label>
+                    <input type="file" id="rack-pieza-foto-file" accept="image/*" onchange="convertRackImageToBase64(this)">
+                    <input type="hidden" id="rack-pieza-foto-base64">
+                </div>
+
+                <div id="rack-preview-foto-miniatura" style="display: none; margin-top: 10px; text-align: center;">
+                    <img id="rack-img-pieza-miniatura-prev" src="" style="max-width: 100%; max-height: 120px; border-radius: 6px;">
+                </div>
+
+                <button type="submit" class="btn-huf" style="width: 100%; margin-top: 15px;">Save Coupon</button>
             </form>
         </div>
     </div>
@@ -664,6 +799,22 @@
                 <div id="contenedor-resultados-busqueda-lockers" class="lista-resultados-lockers"></div>
                 <div class="acciones-modal-huf">
                     <button type="button" class="btn-huf-guardar" onclick="closeModal('modal-resultados-lockers')">Accept</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: RACK SEARCH RESULTS -->
+    <div id="modal-resultados-racks" class="modal">
+        <div class="modal-content modal-huf-diseno" style="max-width: 520px;">
+            <div class="modal-header-huf">
+                <h3>Rack Search Results</h3>
+                <span class="cerrar" onclick="closeModal('modal-resultados-racks')">&times;</span>
+            </div>
+            <div class="modal-body-huf">
+                <div id="contenedor-resultados-busqueda-racks" class="lista-resultados-lockers"></div>
+                <div class="acciones-modal-huf">
+                    <button type="button" class="btn-huf-guardar" onclick="closeModal('modal-resultados-racks')">Accept</button>
                 </div>
             </div>
         </div>

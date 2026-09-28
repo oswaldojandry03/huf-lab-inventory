@@ -94,6 +94,9 @@ const Toast = Swal.mixin({
 let inventarioGabinetes = {};
 let listaEstructuraGabinetes = [];
 let inventarioLockers = {};
+let listaEstructuraLockers = [];   // NEW: locker configs (was hardcoded A-G before)
+let listaEstructuraRacks = [];
+let inventarioRacks = {};
 let listaNacho = [];
 let listaTickets = [];
 let historialTicketsGrafica = [];
@@ -234,6 +237,18 @@ async function migrateExistingUsers(snapshot) {
     }
 }
 
+async function crearLockersPorDefecto() {
+    // Auto-create the 7 original lockers (A-G with 5 compartments each) once
+    const batch = db.batch();
+    const letras = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+    letras.forEach(letra => {
+        const ref = db.collection("config_lockers").doc(`L_${letra}`);
+        batch.set(ref, { nombre: `Locker ${letra}`, niveles: 5 }, { merge: true });
+    });
+    await batch.commit();
+    console.log("✅ Default lockers A-G created (5 compartments each)");
+}
+
 function escucharFirestore() {
     db.collection("usuarios").onSnapshot(async (snapshot) => {
         listaUsuariosFirebase = {};
@@ -261,10 +276,35 @@ function escucharFirestore() {
         generarGabinetes();
     });
 
+    // NEW: Listen to locker configs
+    db.collection("config_lockers").onSnapshot((snapshot) => {
+        listaEstructuraLockers = [];
+        snapshot.forEach((doc) => { listaEstructuraLockers.push({ id: doc.id, ...doc.data() }); });
+        if (listaEstructuraLockers.length === 0) {
+            crearLockersPorDefecto();
+        } else {
+            // Sort by name (Locker A, Locker B...)
+            listaEstructuraLockers.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+            generarTarjetasLockers();
+        }
+    });
+
     db.collection("lockers").onSnapshot((snapshot) => {
         inventarioLockers = {};
         snapshot.forEach((doc) => { inventarioLockers[doc.id] = doc.data().items || []; });
         generarTarjetasLockers();
+    });
+
+    db.collection("config_racks").onSnapshot((snapshot) => {
+        listaEstructuraRacks = [];
+        snapshot.forEach((doc) => { listaEstructuraRacks.push({ id: doc.id, ...doc.data() }); });
+        generarTarjetasRacks();
+    });
+
+    db.collection("racks").onSnapshot((snapshot) => {
+        inventarioRacks = {};
+        snapshot.forEach((doc) => { inventarioRacks[doc.id] = doc.data().items || []; });
+        generarTarjetasRacks();
     });
 
     db.collection("catalogo_nacho").onSnapshot((snapshot) => {
@@ -355,7 +395,6 @@ function aplicarInterfazSesionIniciada() {
     document.getElementById('seccion-lista-fixtures').style.display = 'none';
     document.getElementById('tab-seleccion-inicial').style.display = 'block';
 
-    // Master panel
     if (rolActual === "SUPER_ADMIN") {
         document.getElementById('panel-master-acciones').style.display = 'flex';
     } else {
@@ -366,22 +405,30 @@ function aplicarInterfazSesionIniciada() {
 
     const esAdmin = (rolActual === "SUPER_ADMIN" || rolActual === "ADMIN");
 
-    // Show/hide "Add Client" button based on role (inventory)
     const btnAddClient = document.getElementById('btn-agregar-cliente');
     if (btnAddClient) {
         btnAddClient.style.display = esAdmin ? 'inline-block' : 'none';
     }
 
-    // Show/hide "Add Client" button in global fixtures list
     const btnAddClientList = document.getElementById('btn-agregar-cliente-lista-global');
     if (btnAddClientList) {
         btnAddClientList.style.display = esAdmin ? 'inline-block' : 'none';
     }
 
-    // Show/hide History tab (admin only)
     const btnHistory = document.getElementById('btn-tab-history');
     if (btnHistory) {
         btnHistory.style.display = esAdmin ? 'inline-block' : 'none';
+    }
+
+    const panelRacks = document.getElementById('panel-admin-racks');
+    if (panelRacks) {
+        panelRacks.style.display = esAdmin ? 'block' : 'none';
+    }
+
+    // NEW: show/hide "Create Locker" button
+    const panelLockers = document.getElementById('panel-admin-lockers');
+    if (panelLockers) {
+        panelLockers.style.display = esAdmin ? 'block' : 'none';
     }
 
     if (esAdmin) {
@@ -392,7 +439,6 @@ function aplicarInterfazSesionIniciada() {
         document.getElementById('panel-admin-gabinetes').style.display = 'none';
     }
 
-    // EXTERNAL users: hide inventory card, redirect to fixtures
     const cardInv = document.getElementById('card-inventario-acceso');
     if (rolActual === "EXTERNAL") {
         cardInv.style.display = 'none';
@@ -403,6 +449,7 @@ function aplicarInterfazSesionIniciada() {
 
     renderizarTicketsNacho();
     generarTarjetasLockers();
+    generarTarjetasRacks();
     renderizarCatalogoNacho();
     generarGabinetes();
     actualizarGraficas();
@@ -559,6 +606,8 @@ function logout() {
     document.getElementById('panel-admin-nacho').style.display = 'none';
     document.getElementById('panel-admin-clientes').style.display = 'none';
     document.getElementById('panel-admin-gabinetes').style.display = 'none';
+    document.getElementById('panel-admin-racks').style.display = 'none';
+    document.getElementById('panel-admin-lockers').style.display = 'none';
 
     document.getElementById('bloqueo-pantalla').style.display = 'block';
     document.getElementById('contenido-protegido').style.display = 'none';
@@ -785,7 +834,6 @@ function poblarSelectClientes() {
         });
     }
 
-    // Also populate the global fixture client select
     const selectGlobal = document.getElementById('fg-cliente');
     if (selectGlobal) {
         selectGlobal.innerHTML = '<option value="">-- Select a client --</option>';
@@ -794,6 +842,17 @@ function poblarSelectClientes() {
             option.value = c.nombre;
             option.textContent = c.nombre;
             selectGlobal.appendChild(option);
+        });
+    }
+
+    const selectRack = document.getElementById('rack-pieza-cliente');
+    if (selectRack) {
+        selectRack.innerHTML = '<option value="">-- Select a client --</option>';
+        listaClientesFirebase.forEach((c) => {
+            const option = document.createElement('option');
+            option.value = c.nombre;
+            option.textContent = c.nombre;
+            selectRack.appendChild(option);
         });
     }
 }
@@ -917,7 +976,10 @@ function exportData() {
     const dataBackup = {
         config_gabinetes: listaEstructuraGabinetes,
         inv_gabinetes: inventarioGabinetes,
+        config_lockers: listaEstructuraLockers,
         inv_lockers_v2: inventarioLockers,
+        config_racks: listaEstructuraRacks,
+        inv_racks: inventarioRacks,
         inv_nacho: listaNacho,
         inv_tickets: listaTickets,
         historial_busquedas: historialBusquedasGabinetes,
@@ -956,6 +1018,26 @@ function importData(event) {
             if (importedData.inv_gabinetes) {
                 for (const key in importedData.inv_gabinetes) {
                     batch.set(db.collection("gabinetes").doc(key), importedData.inv_gabinetes[key]);
+                }
+            }
+
+            if (importedData.config_lockers) {
+                importedData.config_lockers.forEach(l => {
+                    const ref = db.collection("config_lockers").doc(l.id);
+                    batch.set(ref, l);
+                });
+            }
+
+            if (importedData.config_racks) {
+                importedData.config_racks.forEach(r => {
+                    const ref = db.collection("config_racks").doc(r.id);
+                    batch.set(ref, r);
+                });
+            }
+
+            if (importedData.inv_racks) {
+                for (const key in importedData.inv_racks) {
+                    batch.set(db.collection("racks").doc(key), importedData.inv_racks[key]);
                 }
             }
 
@@ -1288,16 +1370,19 @@ function searchLockers(event) {
     if (!termino) return;
     let resultados = [];
 
-    for (const letra of ['A', 'B', 'C', 'D', 'E', 'F', 'G']) {
-        for (let d = 1; d <= 5; d++) {
-            const key = `${letra}-${d}`;
+    // Iterate through the dynamic structure
+    listaEstructuraLockers.forEach(locker => {
+        for (let d = 1; d <= locker.niveles; d++) {
+            const key = `${locker.id}-${d}`;
             const piezas = inventarioLockers[key] || [];
             piezas.forEach(p => {
                 const textoCompleto = `${p.nombre} ${p.cliente} ${p.localidad} ${p.proyecto} ${p.desc}`.toLowerCase();
-                if (textoCompleto.includes(termino)) resultados.push({ locker: letra, estante: d, ...p });
+                if (textoCompleto.includes(termino)) {
+                    resultados.push({ lockerNombre: locker.nombre, lockerId: locker.id, estante: d, ...p });
+                }
             });
         }
-    }
+    });
 
     const contResultados = document.getElementById('contenedor-resultados-busqueda-lockers');
     contResultados.innerHTML = '';
@@ -1314,7 +1399,7 @@ function searchLockers(event) {
                     <p style="margin:0; font-size:12px; color:#495057;"><strong>Client:</strong> ${r.cliente || 'N/A'} | <strong>Project:</strong> ${r.proyecto || 'N/A'}</p>
                     <p style="margin:2px 0 0 0; font-size:11px; color:#6c757d;">${r.localidad || 'No location'}</p>
                 </div>
-                <div style="background:#1a1d20; color:#ffffff; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:bold; white-space:nowrap;">Locker ${r.locker} - Div ${r.estante}</div>
+                <div style="background:#1a1d20; color:#ffffff; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:bold; white-space:nowrap;">${r.lockerNombre} - Div ${r.estante}</div>
             `;
             contResultados.appendChild(item);
         });
@@ -1323,7 +1408,7 @@ function searchLockers(event) {
 }
 
 // =============================================================
-// 2. LOCKERS & FIXTURES
+// 2. LOCKERS & FIXTURES (NOW WITH CRUD)
 // =============================================================
 function generarTarjetasLockers() {
     const contenedor = document.getElementById('contenedor-lockers');
@@ -1333,51 +1418,141 @@ function generarTarjetasLockers() {
     contenedor.style.gridTemplateColumns = "repeat(auto-fill, minmax(180px, 1fr))";
     contenedor.style.gap = "15px";
 
-    const letras = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+    const esAdmin = rolActual === "SUPER_ADMIN" || rolActual === "ADMIN";
 
-    letras.forEach(letra => {
+    if (listaEstructuraLockers.length === 0) {
+        contenedor.innerHTML = `<p style="font-size: 13px; color: #6c757d; grid-column: 1/-1; text-align: center; padding: 20px;">No lockers registered. ${esAdmin ? 'Use "+ Create New Locker" to add one.' : ''}</p>`;
+        return;
+    }
+
+    listaEstructuraLockers.forEach((locker) => {
         let totalPiezas = 0;
-        for (let d = 1; d <= 5; d++) {
-            const key = `${letra}-${d}`;
+        for (let d = 1; d <= locker.niveles; d++) {
+            const key = `${locker.id}-${d}`;
             if (inventarioLockers[key]) totalPiezas += inventarioLockers[key].length;
         }
 
         const card = document.createElement('div');
-        card.style.cssText = "background: #ffffff; border: 2px solid #e9ecef; border-radius: 10px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 2px 6px rgba(0,0,0,0.03);";
-        card.onmouseover = () => { card.style.borderColor = "#e30613"; card.style.transform = "translateY(-2px)"; };
-        card.onmouseout = () => { card.style.borderColor = "#e9ecef"; card.style.transform = "none"; };
-        card.onclick = () => openLockerDetail(letra);
+        card.className = 'locker-card';
+        card.onclick = (e) => {
+            if (e.target.closest('.locker-actions')) return;
+            openLockerDetail(locker.id);
+        };
+
+        const adminActions = esAdmin ? `
+            <div class="locker-actions">
+                <button onclick="openEditLockerModal('${locker.id}')" title="Edit Locker">✏️</button>
+                <button onclick="confirmDeleteLocker('${locker.id}', '${locker.nombre}')" title="Delete Locker">&times;</button>
+            </div>
+        ` : '';
+
         card.innerHTML = `
-            <h3 style="color: #e30613; margin-bottom: 5px; font-size: 18px;">Locker ${letra}</h3>
-            <p style="font-size: 12px; color: #6c757d; margin-bottom: 8px;">5 Compartments</p>
-            <p style="margin-top: 8px; font-weight: bold; color: #212529; font-size: 13px; background: #f8f9fa; padding: 6px; border-radius: 6px;">${totalPiezas} Fixture(s) stored</p>
+            ${adminActions}
+            <h3>${locker.nombre}</h3>
+            <p class="locker-levels">${locker.niveles} Compartment(s)</p>
+            <p class="locker-count">${totalPiezas} Fixture(s) stored</p>
         `;
         contenedor.appendChild(card);
     });
 }
 
-function openLockerDetail(letra) {
-    document.getElementById('titulo-modal-locker-detalle').textContent = `Locker ${letra} - Shelves & Pieces`;
+function openCreateLockerModal() {
+    if (rolActual !== "SUPER_ADMIN" && rolActual !== "ADMIN") {
+        Swal.fire({ icon: 'error', title: 'Insufficient permissions', text: 'Only administrators can create lockers.', confirmButtonColor: '#e30613' });
+        return;
+    }
+    document.getElementById('locker-id-editar').value = '';
+    document.getElementById('titulo-modal-locker').textContent = 'Create New Locker';
+    document.getElementById('locker-nombre-input').value = '';
+    document.getElementById('locker-niveles-input').value = '5';
+    openModal('modal-nuevo-locker');
+}
+
+function openEditLockerModal(id) {
+    if (rolActual !== "SUPER_ADMIN" && rolActual !== "ADMIN") {
+        Swal.fire({ icon: 'error', title: 'Insufficient permissions', text: 'Only administrators can edit lockers.', confirmButtonColor: '#e30613' });
+        return;
+    }
+    const locker = listaEstructuraLockers.find(l => l.id === id);
+    if (!locker) return;
+
+    document.getElementById('locker-id-editar').value = locker.id;
+    document.getElementById('titulo-modal-locker').textContent = `Edit Locker: ${locker.nombre}`;
+    document.getElementById('locker-nombre-input').value = locker.nombre;
+    document.getElementById('locker-niveles-input').value = locker.niveles || 5;
+    openModal('modal-nuevo-locker');
+}
+
+async function saveLockerStructure(event) {
+    event.preventDefault();
+    const idExistente = document.getElementById('locker-id-editar').value;
+    const nombre = document.getElementById('locker-nombre-input').value.trim();
+    const niveles = parseInt(document.getElementById('locker-niveles-input').value) || 5;
+    const docId = idExistente ? idExistente : `L_${Date.now()}`;
+    const lockerAnterior = idExistente ? listaEstructuraLockers.find(l => l.id === idExistente) : null;
+
+    const datosLocker = { nombre, niveles };
+
+    await db.collection("config_lockers").doc(docId).set(datosLocker, { merge: true });
+
+    await registrarModificacion(
+        'LOCKER',
+        idExistente ? 'EDITAR' : 'CREAR',
+        idExistente ? `Locker "${nombre}" edited (${niveles} compartments)` : `Locker "${nombre}" created (${niveles} compartments)`,
+        lockerAnterior, datosLocker, 'config_lockers', docId
+    );
+
+    closeModal('modal-nuevo-locker');
+    Toast.fire({ icon: 'success', title: idExistente ? 'Locker updated' : 'New locker created' });
+}
+
+async function confirmDeleteLocker(id, nombre) {
+    if (rolActual !== "SUPER_ADMIN" && rolActual !== "ADMIN") {
+        Swal.fire({ icon: 'error', title: 'Insufficient permissions', text: 'Only administrators can delete lockers.', confirmButtonColor: '#e30613' });
+        return;
+    }
+
+    const res = await Swal.fire({
+        title: `Delete "${nombre}"?`,
+        text: "The locker will be removed. Its items will be kept in the database for safety.",
+        icon: 'warning', showCancelButton: true,
+        confirmButtonColor: '#e30613', cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Yes, delete locker', cancelButtonText: 'Cancel'
+    });
+
+    if (res.isConfirmed) {
+        const lockerAnterior = listaEstructuraLockers.find(l => l.id === id);
+        await db.collection("config_lockers").doc(id).delete();
+        await registrarModificacion('LOCKER', 'ELIMINAR', `Locker "${nombre}" deleted`, lockerAnterior, null, 'config_lockers', id);
+        Toast.fire({ icon: 'success', title: 'Locker deleted' });
+    }
+}
+
+function openLockerDetail(lockerId) {
+    const locker = listaEstructuraLockers.find(l => l.id === lockerId);
+    if (!locker) return;
+
+    document.getElementById('titulo-modal-locker-detalle').textContent = `${locker.nombre} - Compartments & Pieces`;
     const cont = document.getElementById('contenido-estantes-locker');
     cont.innerHTML = '';
     const esAdmin = rolActual === "SUPER_ADMIN" || rolActual === "ADMIN";
 
-    for (let d = 1; d <= 5; d++) {
-        const key = `${letra}-${d}`;
+    for (let d = 1; d <= locker.niveles; d++) {
+        const key = `${lockerId}-${d}`;
         const piezas = inventarioLockers[key] || [];
         const bloque = document.createElement('div');
         bloque.style.cssText = "background:#ffffff; border:1px solid #dee2e6; border-radius:8px; padding:15px; margin-bottom:15px;";
 
         let htmlPiezas = '';
         if (piezas.length === 0) {
-            htmlPiezas = `<p style="font-size: 12px; color: #adb5bd; grid-column: 1/-1;">No pieces registered on this shelf.</p>`;
+            htmlPiezas = `<p style="font-size: 12px; color: #adb5bd; grid-column: 1/-1;">No pieces registered on this compartment.</p>`;
         } else {
             piezas.forEach((p, idx) => {
                 const imgTag = p.foto ? `<img src="${p.foto}" style="width:70px; height:70px; object-fit:cover; border-radius:6px; cursor:pointer;" onclick="enlargePhoto('${p.foto}')" title="Click to enlarge">` : '';
                 const btnAcciones = esAdmin ? `
                     <div style="display:flex; gap:4px; margin-top:8px;">
-                        <button class="btn-editar-pieza" style="background:#e9ecef; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;" onclick="openEditPieceModal('${letra}', ${d}, ${idx})" title="Edit Fixture">✏️</button>
-                        <button class="btn-borrar-pieza" style="background:#fff3cd; border:none; color:#e30613; padding:4px 8px; border-radius:4px; cursor:pointer; font-weight:bold;" onclick="deleteLockerPiece('${letra}', ${d}, ${idx})" title="Delete">&times;</button>
+                        <button class="btn-editar-pieza" style="background:#e9ecef; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;" onclick="openEditPieceModal('${lockerId}', ${d}, ${idx})" title="Edit Fixture">✏️</button>
+                        <button class="btn-borrar-pieza" style="background:#fff3cd; border:none; color:#e30613; padding:4px 8px; border-radius:4px; cursor:pointer; font-weight:bold;" onclick="deleteLockerPiece('${lockerId}', ${d}, ${idx})" title="Delete">&times;</button>
                     </div>
                 ` : '';
 
@@ -1399,11 +1574,11 @@ function openLockerDetail(letra) {
             });
         }
 
-        const btnAgregar = usuarioActual ? `<button class="btn-huf-secundario" style="font-size: 11px; padding: 4px 8px;" onclick="openAddPieceModal('${letra}', ${d})">+ Add Fixture</button>` : '';
+        const btnAgregar = usuarioActual ? `<button class="btn-huf-secundario" style="font-size: 11px; padding: 4px 8px;" onclick="openAddPieceModal('${lockerId}', ${d})">+ Add Fixture</button>` : '';
 
         bloque.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #f1f3f5; padding-bottom:8px; margin-bottom:12px;">
-                <h4 style="margin:0; font-size:14px; color:#343a40;">Shelf / Compartment ${d}</h4>
+                <h4 style="margin:0; font-size:14px; color:#343a40;">Compartment ${d}</h4>
                 ${btnAgregar}
             </div>
             <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:12px;">
@@ -1439,11 +1614,11 @@ function viewFullFixtureDetail(fixture) {
     });
 }
 
-function openAddPieceModal(letra, divNum) {
-    document.getElementById('pieza-locker-id').value = letra;
+function openAddPieceModal(lockerId, divNum) {
+    document.getElementById('pieza-locker-id').value = lockerId;
     document.getElementById('pieza-div-id').value = divNum;
     document.getElementById('pieza-index').value = '';
-    document.getElementById('titulo-modal-pieza').textContent = `Add Fixture to Locker ${letra} (Compartment ${divNum})`;
+    document.getElementById('titulo-modal-pieza').textContent = `Add Fixture to Compartment ${divNum}`;
     document.getElementById('input-pieza-nombre').value = '';
     document.getElementById('input-pieza-cliente').value = '';
     document.getElementById('input-pieza-localidad').value = '';
@@ -1460,16 +1635,17 @@ function openAddPieceModal(letra, divNum) {
     if (check) check.checked = false;
 
     poblarSelectClientes();
+    closeModal('modal-locker-detalle');
     openModal('modal-editar-pieza');
 }
 
-function openEditPieceModal(letra, divNum, index) {
-    const key = `${letra}-${divNum}`;
+function openEditPieceModal(lockerId, divNum, index) {
+    const key = `${lockerId}-${divNum}`;
     const pieza = inventarioLockers[key][index];
     if (!pieza) return;
     poblarSelectClientes();
 
-    document.getElementById('pieza-locker-id').value = letra;
+    document.getElementById('pieza-locker-id').value = lockerId;
     document.getElementById('pieza-div-id').value = divNum;
     document.getElementById('pieza-index').value = index;
     document.getElementById('titulo-modal-pieza').textContent = `Edit Fixture: ${pieza.nombre}`;
@@ -1523,10 +1699,10 @@ function convertImageToBase64(input) {
 
 async function saveLockerPiece(event) {
     event.preventDefault();
-    const letra = document.getElementById('pieza-locker-id').value;
+    const lockerId = document.getElementById('pieza-locker-id').value;
     const divNum = document.getElementById('pieza-div-id').value;
     const index = document.getElementById('pieza-index').value;
-    const key = `${letra}-${divNum}`;
+    const key = `${lockerId}-${divNum}`;
 
     const part1 = document.getElementById('proj-part1').value.trim();
     const part2 = document.getElementById('proj-part2').value.trim();
@@ -1553,8 +1729,8 @@ async function saveLockerPiece(event) {
         'LOCKER',
         index === "" ? 'CREAR' : 'EDITAR',
         index === "" 
-            ? `Fixture "${piezaData.nombre}" added to Locker ${letra} (Compartment ${divNum})`
-            : `Fixture "${piezaData.nombre}" edited in Locker ${letra} (Compartment ${divNum})`,
+            ? `Fixture "${piezaData.nombre}" added to compartment ${divNum} (locker ${lockerId})`
+            : `Fixture "${piezaData.nombre}" edited in compartment ${divNum} (locker ${lockerId})`,
         piezaAnterior, piezaData, 'lockers', key
     );
 
@@ -1563,16 +1739,16 @@ async function saveLockerPiece(event) {
 
     closeModal('modal-editar-pieza');
     Toast.fire({ icon: 'success', title: 'Fixture saved successfully' });
-    openLockerDetail(letra);
+    openLockerDetail(lockerId);
 
     if (quiereAgregarGlobal) {
         setTimeout(() => {
-            openNewGlobalFixtureFromLocker(piezaData, letra, divNum);
+            openNewGlobalFixtureFromLocker(piezaData, lockerId, divNum);
         }, 400);
     }
 }
 
-async function deleteLockerPiece(letra, divNum, index) {
+async function deleteLockerPiece(lockerId, divNum, index) {
     const res = await Swal.fire({
         title: 'Delete fixture?', text: "This element will be removed from the locker.",
         icon: 'warning', showCancelButton: true,
@@ -1581,14 +1757,14 @@ async function deleteLockerPiece(letra, divNum, index) {
     });
 
     if (res.isConfirmed) {
-        const key = `${letra}-${divNum}`;
+        const key = `${lockerId}-${divNum}`;
         if (inventarioLockers[key]) {
             const piezaEliminada = inventarioLockers[key][index];
             inventarioLockers[key].splice(index, 1);
             await db.collection("lockers").doc(key).set({ items: inventarioLockers[key] });
-            await registrarModificacion('LOCKER', 'ELIMINAR', `Fixture "${piezaEliminada.nombre}" removed from Locker ${letra} (Compartment ${divNum})`, piezaEliminada, null, 'lockers', key);
+            await registrarModificacion('LOCKER', 'ELIMINAR', `Fixture "${piezaEliminada.nombre}" removed from compartment ${divNum} (locker ${lockerId})`, piezaEliminada, null, 'lockers', key);
             Toast.fire({ icon: 'success', title: 'Fixture deleted' });
-            openLockerDetail(letra);
+            openLockerDetail(lockerId);
         }
     }
 }
@@ -1596,6 +1772,361 @@ async function deleteLockerPiece(letra, divNum, index) {
 function enlargePhoto(src) {
     document.getElementById('foto-ampliada-src').src = src;
     openModal('modal-visor-foto');
+}
+
+// =============================================================
+// 2.B RACKS & COUPONS
+// =============================================================
+function generarTarjetasRacks() {
+    const contenedor = document.getElementById('contenedor-racks');
+    if (!contenedor) return;
+    contenedor.innerHTML = '';
+    contenedor.style.display = "grid";
+    contenedor.style.gridTemplateColumns = "repeat(auto-fill, minmax(180px, 1fr))";
+    contenedor.style.gap = "15px";
+
+    const esAdmin = rolActual === "SUPER_ADMIN" || rolActual === "ADMIN";
+
+    if (listaEstructuraRacks.length === 0) {
+        contenedor.innerHTML = `<p style="font-size: 13px; color: #6c757d; grid-column: 1/-1; text-align: center; padding: 20px;">No racks registered. ${esAdmin ? 'Use "+ Create New Rack" to add one.' : ''}</p>`;
+        return;
+    }
+
+    listaEstructuraRacks.forEach((rack) => {
+        let totalPiezas = 0;
+        for (let d = 1; d <= rack.niveles; d++) {
+            const key = `${rack.id}-${d}`;
+            if (inventarioRacks[key]) totalPiezas += inventarioRacks[key].length;
+        }
+
+        const card = document.createElement('div');
+        card.className = 'rack-card';
+        card.onclick = (e) => {
+            if (e.target.closest('.rack-actions')) return;
+            openRackDetail(rack.id);
+        };
+
+        const adminActions = esAdmin ? `
+            <div class="rack-actions">
+                <button onclick="openEditRackModal('${rack.id}')" title="Edit Rack">✏️</button>
+                <button onclick="confirmDeleteRack('${rack.id}', '${rack.nombre}')" title="Delete Rack">&times;</button>
+            </div>
+        ` : '';
+
+        card.innerHTML = `
+            ${adminActions}
+            <h3>${rack.nombre}</h3>
+            <p class="rack-levels">${rack.niveles} Level(s)</p>
+            <p class="rack-count">${totalPiezas} Coupon(s) stored</p>
+        `;
+        contenedor.appendChild(card);
+    });
+}
+
+function openCreateRackModal() {
+    if (rolActual !== "SUPER_ADMIN" && rolActual !== "ADMIN") {
+        Swal.fire({ icon: 'error', title: 'Insufficient permissions', text: 'Only administrators can create racks.', confirmButtonColor: '#e30613' });
+        return;
+    }
+    document.getElementById('rack-id-editar').value = '';
+    document.getElementById('titulo-modal-rack').textContent = 'Create New Rack';
+    document.getElementById('rack-nombre-input').value = '';
+    document.getElementById('rack-niveles-input').value = '3';
+    openModal('modal-nuevo-rack');
+}
+
+function openEditRackModal(id) {
+    if (rolActual !== "SUPER_ADMIN" && rolActual !== "ADMIN") {
+        Swal.fire({ icon: 'error', title: 'Insufficient permissions', text: 'Only administrators can edit racks.', confirmButtonColor: '#e30613' });
+        return;
+    }
+    const rack = listaEstructuraRacks.find(r => r.id === id);
+    if (!rack) return;
+
+    document.getElementById('rack-id-editar').value = rack.id;
+    document.getElementById('titulo-modal-rack').textContent = `Edit Rack: ${rack.nombre}`;
+    document.getElementById('rack-nombre-input').value = rack.nombre;
+    document.getElementById('rack-niveles-input').value = rack.niveles || 3;
+    openModal('modal-nuevo-rack');
+}
+
+async function saveRackStructure(event) {
+    event.preventDefault();
+    const idExistente = document.getElementById('rack-id-editar').value;
+    const nombre = document.getElementById('rack-nombre-input').value.trim();
+    const niveles = parseInt(document.getElementById('rack-niveles-input').value) || 3;
+    const docId = idExistente ? idExistente : `R_${Date.now()}`;
+    const rackAnterior = idExistente ? listaEstructuraRacks.find(r => r.id === idExistente) : null;
+
+    const datosRack = { nombre, niveles };
+
+    await db.collection("config_racks").doc(docId).set(datosRack, { merge: true });
+
+    await registrarModificacion(
+        'RACK',
+        idExistente ? 'EDITAR' : 'CREAR',
+        idExistente ? `Rack "${nombre}" edited (${niveles} levels)` : `Rack "${nombre}" created (${niveles} levels)`,
+        rackAnterior, datosRack, 'config_racks', docId
+    );
+
+    closeModal('modal-nuevo-rack');
+    Toast.fire({ icon: 'success', title: idExistente ? 'Rack updated' : 'New rack created' });
+}
+
+async function confirmDeleteRack(id, nombre) {
+    if (rolActual !== "SUPER_ADMIN" && rolActual !== "ADMIN") {
+        Swal.fire({ icon: 'error', title: 'Insufficient permissions', text: 'Only administrators can delete racks.', confirmButtonColor: '#e30613' });
+        return;
+    }
+
+    const res = await Swal.fire({
+        title: `Delete "${nombre}"?`,
+        text: "The rack will be removed. Its items will be kept in the database for safety.",
+        icon: 'warning', showCancelButton: true,
+        confirmButtonColor: '#e30613', cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Yes, delete rack', cancelButtonText: 'Cancel'
+    });
+
+    if (res.isConfirmed) {
+        const rackAnterior = listaEstructuraRacks.find(r => r.id === id);
+        await db.collection("config_racks").doc(id).delete();
+        await registrarModificacion('RACK', 'ELIMINAR', `Rack "${nombre}" deleted`, rackAnterior, null, 'config_racks', id);
+        Toast.fire({ icon: 'success', title: 'Rack deleted' });
+    }
+}
+
+function openRackDetail(rackId) {
+    const rack = listaEstructuraRacks.find(r => r.id === rackId);
+    if (!rack) return;
+
+    document.getElementById('titulo-modal-rack-detalle').textContent = `${rack.nombre} - Levels & Coupons`;
+    const cont = document.getElementById('contenido-niveles-rack');
+    cont.innerHTML = '';
+    const esAdmin = rolActual === "SUPER_ADMIN" || rolActual === "ADMIN";
+
+    for (let d = 1; d <= rack.niveles; d++) {
+        const key = `${rackId}-${d}`;
+        const piezas = inventarioRacks[key] || [];
+        const bloque = document.createElement('div');
+        bloque.style.cssText = "background:#ffffff; border:1px solid #dee2e6; border-radius:8px; padding:15px; margin-bottom:15px;";
+
+        let htmlPiezas = '';
+        if (piezas.length === 0) {
+            htmlPiezas = `<p style="font-size: 12px; color: #adb5bd; grid-column: 1/-1;">No coupons registered on this level.</p>`;
+        } else {
+            piezas.forEach((p, idx) => {
+                const imgTag = p.foto ? `<img src="${p.foto}" style="width:70px; height:70px; object-fit:cover; border-radius:6px; cursor:pointer;" onclick="enlargePhoto('${p.foto}')" title="Click to enlarge">` : '';
+                const btnAcciones = esAdmin ? `
+                    <div style="display:flex; gap:4px; margin-top:8px;">
+                        <button class="btn-editar-pieza" style="background:#e9ecef; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;" onclick="openEditRackPieceModal('${rackId}', ${d}, ${idx})" title="Edit Coupon">✏️</button>
+                        <button class="btn-borrar-pieza" style="background:#fff3cd; border:none; color:#e30613; padding:4px 8px; border-radius:4px; cursor:pointer; font-weight:bold;" onclick="deleteRackPiece('${rackId}', ${d}, ${idx})" title="Delete">&times;</button>
+                    </div>
+                ` : '';
+
+                const fixtureJSON = JSON.stringify(p).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
+
+                htmlPiezas += `
+                    <div style="background:#f8f9fa; border:1px solid #e9ecef; border-radius:8px; padding:12px; display:flex; gap:12px; align-items:flex-start; position:relative;">
+                        ${imgTag}
+                        <div style="flex:1;">
+                            <h5 style="margin:0 0 5px 0; font-size:14px; color:#1a1d20;">${p.nombre}</h5>
+                            <p style="margin:0; font-size:11px; color:#495057;"><strong>Client:</strong> ${p.cliente || 'N/A'}</p>
+                            <p style="margin:0; font-size:11px; color:#495057;"><strong>Project:</strong> ${p.proyecto || 'N/A'}</p>
+                            <button style="margin-top:6px; background:none; border:none; color:#e30613; font-size:11px; font-weight:bold; padding:0; cursor:pointer; text-decoration:underline;" onclick='viewFullFixtureDetail(${fixtureJSON})'>View more / Details</button>
+                            ${btnAcciones}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        const btnAgregar = usuarioActual ? `<button class="btn-huf-secundario" style="font-size: 11px; padding: 4px 8px;" onclick="openAddRackPieceModal('${rackId}', ${d})">+ Add Coupon</button>` : '';
+
+        bloque.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #f1f3f5; padding-bottom:8px; margin-bottom:12px;">
+                <h4 style="margin:0; font-size:14px; color:#343a40;">Level ${d}</h4>
+                ${btnAgregar}
+            </div>
+            <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:12px;">
+                ${htmlPiezas}
+            </div>
+        `;
+        cont.appendChild(bloque);
+    }
+    openModal('modal-rack-detalle');
+}
+
+function openAddRackPieceModal(rackId, nivelNum) {
+    document.getElementById('rack-pieza-rack-id').value = rackId;
+    document.getElementById('rack-pieza-nivel-id').value = nivelNum;
+    document.getElementById('rack-pieza-index').value = '';
+    document.getElementById('titulo-modal-pieza-rack').textContent = `Add Coupon (Level ${nivelNum})`;
+    document.getElementById('rack-pieza-nombre').value = '';
+    document.getElementById('rack-pieza-cliente').value = '';
+    document.getElementById('rack-proj-part1').value = '';
+    document.getElementById('rack-proj-part2').value = '';
+    document.getElementById('rack-pieza-proyecto').value = '';
+    document.getElementById('rack-pieza-desc').value = '';
+    document.getElementById('rack-pieza-foto-file').value = '';
+    document.getElementById('rack-pieza-foto-base64').value = '';
+    document.getElementById('rack-preview-foto-miniatura').style.display = 'none';
+
+    poblarSelectClientes();
+    closeModal('modal-rack-detalle');
+    openModal('modal-editar-pieza-rack');
+}
+
+function openEditRackPieceModal(rackId, nivelNum, index) {
+    const key = `${rackId}-${nivelNum}`;
+    const pieza = inventarioRacks[key][index];
+    if (!pieza) return;
+    poblarSelectClientes();
+
+    document.getElementById('rack-pieza-rack-id').value = rackId;
+    document.getElementById('rack-pieza-nivel-id').value = nivelNum;
+    document.getElementById('rack-pieza-index').value = index;
+    document.getElementById('titulo-modal-pieza-rack').textContent = `Edit Coupon: ${pieza.nombre}`;
+    document.getElementById('rack-pieza-nombre').value = pieza.nombre || '';
+    document.getElementById('rack-pieza-cliente').value = pieza.cliente || '';
+
+    if (pieza.proyecto && pieza.proyecto.includes('.')) {
+        const partes = pieza.proyecto.split('.');
+        document.getElementById('rack-proj-part1').value = partes[0] || '';
+        document.getElementById('rack-proj-part2').value = partes[1] || '';
+    } else {
+        document.getElementById('rack-proj-part1').value = '';
+        document.getElementById('rack-proj-part2').value = '';
+    }
+
+    document.getElementById('rack-pieza-desc').value = pieza.desc || '';
+    document.getElementById('rack-pieza-foto-base64').value = pieza.foto || '';
+
+    if (pieza.foto) {
+        document.getElementById('rack-img-pieza-miniatura-prev').src = pieza.foto;
+        document.getElementById('rack-preview-foto-miniatura').style.display = 'block';
+    } else {
+        document.getElementById('rack-preview-foto-miniatura').style.display = 'none';
+    }
+
+    closeModal('modal-rack-detalle');
+    openModal('modal-editar-pieza-rack');
+}
+
+function convertRackImageToBase64(input) {
+    const file = input.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const base64String = e.target.result;
+            document.getElementById('rack-pieza-foto-base64').value = base64String;
+            document.getElementById('rack-img-pieza-miniatura-prev').src = base64String;
+            document.getElementById('rack-preview-foto-miniatura').style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+async function saveRackPiece(event) {
+    event.preventDefault();
+    const rackId = document.getElementById('rack-pieza-rack-id').value;
+    const nivelNum = document.getElementById('rack-pieza-nivel-id').value;
+    const index = document.getElementById('rack-pieza-index').value;
+    const key = `${rackId}-${nivelNum}`;
+
+    const part1 = document.getElementById('rack-proj-part1').value.trim();
+    const part2 = document.getElementById('rack-proj-part2').value.trim();
+    const proyectoCompleto = (part1 && part2) ? `${part1}.${part2}` : '';
+
+    const piezaData = {
+        nombre: document.getElementById('rack-pieza-nombre').value.trim(),
+        cliente: document.getElementById('rack-pieza-cliente').value,
+        proyecto: proyectoCompleto,
+        desc: document.getElementById('rack-pieza-desc').value.trim(),
+        foto: document.getElementById('rack-pieza-foto-base64').value || ''
+    };
+
+    if (!inventarioRacks[key]) inventarioRacks[key] = [];
+    const piezaAnterior = (index !== "" && inventarioRacks[key][parseInt(index)]) ? inventarioRacks[key][parseInt(index)] : null;
+
+    if (index === "") inventarioRacks[key].push(piezaData);
+    else inventarioRacks[key][parseInt(index)] = piezaData;
+
+    await db.collection("racks").doc(key).set({ items: inventarioRacks[key] });
+
+    await registrarModificacion(
+        'RACK',
+        index === "" ? 'CREAR' : 'EDITAR',
+        index === "" 
+            ? `Coupon "${piezaData.nombre}" added to rack ${rackId} (Level ${nivelNum})`
+            : `Coupon "${piezaData.nombre}" edited in rack ${rackId} (Level ${nivelNum})`,
+        piezaAnterior, piezaData, 'racks', key
+    );
+
+    closeModal('modal-editar-pieza-rack');
+    Toast.fire({ icon: 'success', title: 'Coupon saved successfully' });
+    openRackDetail(rackId);
+}
+
+async function deleteRackPiece(rackId, nivelNum, index) {
+    const res = await Swal.fire({
+        title: 'Delete coupon?', text: "This element will be removed from the rack.",
+        icon: 'warning', showCancelButton: true,
+        confirmButtonColor: '#e30613', cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Yes, delete', cancelButtonText: 'Cancel'
+    });
+
+    if (res.isConfirmed) {
+        const key = `${rackId}-${nivelNum}`;
+        if (inventarioRacks[key]) {
+            const piezaEliminada = inventarioRacks[key][index];
+            inventarioRacks[key].splice(index, 1);
+            await db.collection("racks").doc(key).set({ items: inventarioRacks[key] });
+            await registrarModificacion('RACK', 'ELIMINAR', `Coupon "${piezaEliminada.nombre}" removed from rack ${rackId} (Level ${nivelNum})`, piezaEliminada, null, 'racks', key);
+            Toast.fire({ icon: 'success', title: 'Coupon deleted' });
+            openRackDetail(rackId);
+        }
+    }
+}
+
+function searchRacks(event) {
+    event.preventDefault();
+    const termino = document.getElementById('buscar-rack').value.toLowerCase().trim();
+    if (!termino) return;
+    let resultados = [];
+
+    listaEstructuraRacks.forEach(rack => {
+        for (let d = 1; d <= rack.niveles; d++) {
+            const key = `${rack.id}-${d}`;
+            const piezas = inventarioRacks[key] || [];
+            piezas.forEach(p => {
+                const textoCompleto = `${p.nombre} ${p.cliente} ${p.proyecto} ${p.desc}`.toLowerCase();
+                if (textoCompleto.includes(termino)) {
+                    resultados.push({ rackNombre: rack.nombre, rackId: rack.id, nivel: d, ...p });
+                }
+            });
+        }
+    });
+
+    const contResultados = document.getElementById('contenedor-resultados-busqueda-racks');
+    contResultados.innerHTML = '';
+
+    if (resultados.length === 0) {
+        contResultados.innerHTML = `<p style="font-size:13px; color:#6c757d; text-align:center; padding:15px;">No coupons found for "${termino}".</p>`;
+    } else {
+        resultados.forEach(r => {
+            const item = document.createElement('div');
+            item.style.cssText = "display:flex; justify-content:space-between; align-items:center; padding:12px; background:#f8f9fa; border:1px solid #dee2e6; border-radius:8px; margin-bottom:10px;";
+            item.innerHTML = `
+                <div>
+                    <h5 style="margin:0 0 4px 0; color:#e30613; font-size:14px;">${r.nombre}</h5>
+                    <p style="margin:0; font-size:12px; color:#495057;"><strong>Client:</strong> ${r.cliente || 'N/A'} | <strong>Project:</strong> ${r.proyecto || 'N/A'}</p>
+                </div>
+                <div style="background:#1a1d20; color:#ffffff; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:bold; white-space:nowrap;">${r.rackNombre} - Level ${r.nivel}</div>
+            `;
+            contResultados.appendChild(item);
+        });
+    }
+    openModal('modal-resultados-racks');
 }
 
 // =============================================================
@@ -2058,7 +2589,7 @@ function renderizarHistorialModificaciones() {
     }
 
     const esAdmin = (rolActual === "SUPER_ADMIN" || rolActual === "ADMIN");
-    const coloresTipo = { 'GABINETE': '#003366', 'LOCKER': '#e30613', 'CLIENTE': '#2b8a3e', 'MATERIAL': '#856404', 'TICKET': '#6c757d', 'USUARIO': '#862e9c', 'FIXTURE_GLOBAL': '#0c8599' };
+    const coloresTipo = { 'GABINETE': '#003366', 'LOCKER': '#e30613', 'RACK': '#862e9c', 'CLIENTE': '#2b8a3e', 'MATERIAL': '#856404', 'TICKET': '#6c757d', 'USUARIO': '#862e9c', 'FIXTURE_GLOBAL': '#0c8599' };
     const iconosAccion = { 'CREAR': '➕', 'EDITAR': '✏️', 'ELIMINAR': '🗑️', 'REVERTIR': '↩️' };
 
     listaFiltrada.forEach((h) => {
@@ -2136,9 +2667,9 @@ async function revertModification(historyId) {
             }
         } else if (accion === 'EDITAR') {
             if (datosAntes) {
-                if (col === 'lockers' && Array.isArray(datosAntes)) {
+                if ((col === 'lockers' || col === 'racks') && Array.isArray(datosAntes)) {
                     await db.collection(col).doc(docId).set({ items: datosAntes });
-                } else if (col === 'gabinetes' && datosAntes.nombre !== undefined) {
+                } else if ((col === 'gabinetes' || col === 'config_racks' || col === 'config_gabinetes' || col === 'config_lockers') && datosAntes.nombre !== undefined) {
                     await db.collection(col).doc(docId).set(datosAntes, { merge: false });
                 } else {
                     await db.collection(col).doc(docId).set(datosAntes, { merge: true });
@@ -2227,11 +2758,13 @@ function openNewGlobalFixtureModal() {
     openModal('modal-fixture-global');
 }
 
-function openNewGlobalFixtureFromLocker(piezaData, letra, divNum) {
+function openNewGlobalFixtureFromLocker(piezaData, lockerId, divNum) {
     openNewGlobalFixtureModal();
-    contextoFixtureGlobalDesdeLocker = { letra, divNum };
+    contextoFixtureGlobalDesdeLocker = { lockerId, divNum };
+    const locker = listaEstructuraLockers.find(l => l.id === lockerId);
+    const lockerNombre = locker ? locker.nombre : lockerId;
     
-    document.getElementById('titulo-modal-fixture-global').textContent = `Add to Global List (from Locker ${letra})`;
+    document.getElementById('titulo-modal-fixture-global').textContent = `Add to Global List (from ${lockerNombre})`;
     document.getElementById('fg-nombre').value = piezaData.nombre || '';
     document.getElementById('fg-cliente').value = piezaData.cliente || '';
     document.getElementById('fg-ubicacion').value = piezaData.localidad || '';
@@ -2333,7 +2866,9 @@ async function saveGlobalFixture(event) {
     };
 
     if (contextoFixtureGlobalDesdeLocker) {
-        datosFixture.origen = `Locker ${contextoFixtureGlobalDesdeLocker.letra} - Div ${contextoFixtureGlobalDesdeLocker.divNum}`;
+        const locker = listaEstructuraLockers.find(l => l.id === contextoFixtureGlobalDesdeLocker.lockerId);
+        const lockerNombre = locker ? locker.nombre : contextoFixtureGlobalDesdeLocker.lockerId;
+        datosFixture.origen = `${lockerNombre} - Div ${contextoFixtureGlobalDesdeLocker.divNum}`;
     }
 
     const fxAnterior = idExistente ? listaFixturesGlobales.find(f => f.firestoreId === idExistente) : null;
