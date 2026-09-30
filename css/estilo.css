@@ -1224,3 +1224,435 @@ header {
     color: #ffffff;
     border-color: #e30613;
 }
+
+/* ============================================================ */
+/* RESPONSIVE — MOBILE BASIC (Nivel 1)                          */
+/* Solo aplica en pantallas menores a 768px (tablets y phones)  */
+/* ============================================================ */
+
+@media (max-width: 768px) {
+
+    /* -------- HEADER -------- */
+    header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        padding: 10px 15px;
+    }
+
+    .header-brand {
+        justify-content: center;
+    }
+
+    .header-logo {
+        height: 32px;
+    }
+
+    .header-brand h1 {
+        font-size: 15px;
+        text-align: center;
+    }
+
+    /* -------- NAV TABS -------- */
+    .nav-tabs {
+        width: 100%;
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 4px;
+    }
+
+    .nav-tabs::-webkit-scrollbar {
+        height: 4px;
+    }
+
+    .nav-tabs::-webkit-scrollbar-thumb {
+        background: #ced4da;
+        border-radius: 2px;
+    }
+
+    .btn-tab {
+        padding: 6px 12px;
+        font-size: 12px;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    /* -------- USUARIO PANEL -------- */
+    .usuario-panel {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 6px;
+        font-size: 12px;
+    }
+
+    #panel-master-acciones {
+        flex-wrap: wrap;
+        justify-content: center;
+        width: 100%;
+    }
+
+    .btn-login,
+    .btn-huf-secundario {
+        font-size: 11px;
+        padding: 6px 10px;
+    }
+
+    /* -------- CONTENEDORES PRINCIPALES -------- */
+    .tab-content {
+        padding: 12px;
+    }
+
+    .buscador-container {
+        padding: 12px;
+        margin-bottom: 15px;
+    }
+
+    .buscador-container h3 {
+        font-size: 14px;
+    }
+
+    .barra-busqueda {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .barra-busqueda input {
+        width: 100%;
+        font-size: 13px;
+        padding: 8px 12px;
+    }
+
+    .barra-busqueda button {
+        width: 100%;
+        padding: 8px 12px;
+        font-size: 13px;
+    }
+
+    /* -------- BOTONES HUF -------- */
+    .btn-huf {
+        padding: 8px 14px;
+        font-size: 13px;
+    }
+
+    /* -------- GABINETES -------- */
+    .gabinete-wrapper {
+        padding: 12px;
+        margin-bottom: 15px;
+    }
+
+    .header-gabinete-flex {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .header-gabinete-flex h2 {
+        font-size: 14px;
+    }
+
+    .acciones-gabinete-header {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    /* Estructura custom de gabinetes: scroll horizontal */
+    .gabinete-contenedor-dinamico {
+        overflow-x: auto;
+        padding: 10px;
+    }
+
+    /* Grids de gabinetes: columnas más angostas */
+    #contenedor-gabinetes-dinamicos [style*="grid-template-columns: repeat("] {
+        min-width: 100%;
+    }
+
+    /* Los cajones se hacen más pequeños */
+    .cajon {
+        min-height: 55px;
+        padding: 6px 2px;
+    }
+
+    .cajon .numero {
+        font-size: 10px;
+    }
+
+    .cajon .material {
+        font-size: 9px;
+    }
+
+    /* -------- LOCKERS / RACKS -------- */
+    .grid-lockers-tarjetas,
+    #contenedor-lockers,
+    #contenedor-racks {
+        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)) !important;
+        gap: 10px !important;
+    }
+
+    /* -------- CATÁLOGO DE MATERIALES -------- */
+    .catalogo-grid {
+        grid-template-columns: 1fr !important;
+        gap: 12px;
+    }
+
+    .card-material {
+        padding: 14px;
+    }
+
+    .card-material h4 {
+        font-size: 14px;
+    }
+
+    .card-material p {
+        font-size: 12px;
+    }
+
+    /* -------- TICKETS -------- */
+    .grid-tickets {
+        grid-template-columns: 1fr !important;
+        gap: 10px;
+    }
+
+    .header-solicitudes {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+
+    /* -------- GRÁFICAS -------- */
+    .grid-graficas {
+        grid-template-columns: 1fr !important;
+        gap: 15px;
+    }
+
+    .card-grafica {
+        padding: 14px;
+    }
+
+    .card-grafica h3 {
+        font-size: 13px;
+    }
+
+    .chart-container {
+        height: 250px;
+    }
+
+    /* -------- PANEL DE CLIENTES -------- */
+    .contenedor-clientes-lista {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 8px;
+    }
+
+    .tarjeta-cliente-item {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+
+    /* -------- HISTORIAL DE MODIFICACIONES -------- */
+    #lista-historial-modificaciones > div {
+        padding: 10px 12px !important;
+    }
+
+    /* -------- MODALES -------- */
+    .modal {
+        padding: 10px 0;
+    }
+
+    .modal-contenido,
+    .modal-content {
+        width: 95%;
+        max-width: none;
+        padding: 18px;
+        margin: 0 auto;
+        max-height: calc(100vh - 20px);
+    }
+
+    .modal-ancho {
+        max-width: none !important;
+    }
+
+    .modal-titulo-huf {
+        font-size: 15px;
+    }
+
+    .form-group label {
+        font-size: 12px;
+    }
+
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+        font-size: 13px;
+        padding: 8px 10px;
+    }
+
+    /* Modales con diseño HUF */
+    .modal-huf-diseno {
+        max-width: 95%;
+    }
+
+    .modal-header-huf {
+        padding: 12px 15px;
+    }
+
+    .modal-header-huf h3 {
+        font-size: 14px;
+    }
+
+    /* Máscara de proyecto: inputs más pequeños */
+    .mascara-proyecto input {
+        font-size: 14px;
+        letter-spacing: 2px;
+    }
+
+    .mascara-proyecto #proj-part1,
+    .mascara-proyecto #fg-proj-part1,
+    .mascara-proyecto #rack-proj-part1 {
+        width: 80px;
+    }
+
+    .mascara-proyecto #proj-part2,
+    .mascara-proyecto #fg-proj-part2,
+    .mascara-proyecto #rack-proj-part2 {
+        width: 65px;
+    }
+
+    /* -------- LISTA DE ESTANTES EN LOCKER/RACK -------- */
+    .lista-estantes-container {
+        max-height: 60vh;
+    }
+
+    /* Tarjetas de piezas dentro de lockers */
+    #contenido-estantes-locker [style*="grid-template-columns"] ,
+    #contenido-niveles-rack [style*="grid-template-columns"] {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* -------- BÚSQUEDA DE LOCKERS -------- */
+    .lista-resultados-lockers {
+        max-height: 50vh;
+    }
+
+    /* -------- PANEL DE LISTA GLOBAL DE FIXTURES -------- */
+    #contenedor-fixtures-globales > div > div[style*="display: flex"] {
+        flex-wrap: wrap;
+    }
+
+    /* Grid de fixtures globales: 1 columna en móvil */
+    #contenedor-fixtures-globales > div > div[style*="display: grid"] {
+        grid-template-columns: 1fr !important;
+        padding: 12px;
+    }
+
+    /* -------- SELECCIÓN INICIAL (FIXTURES / INVENTARIO) -------- */
+    #tab-seleccion-inicial h1 {
+        font-size: 22px !important;
+    }
+
+    #tab-seleccion-inicial > div > div[style*="grid-template-columns: 1fr 1fr"] {
+        grid-template-columns: 1fr !important;
+        max-width: 100% !important;
+    }
+
+    #tab-seleccion-inicial div[onclick*="showSection"] {
+        padding: 25px 15px !important;
+    }
+
+    #tab-seleccion-inicial div[onclick*="showSection"] h2 {
+        font-size: 18px !important;
+    }
+
+    /* -------- MODAL DE FIXTURE GLOBAL: grids internos a 1 columna -------- */
+    #modal-fixture-global div[style*="grid-template-columns: 1fr 1fr"] {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* -------- TABLA DE USUARIOS EN MODAL -------- */
+    #modal-gestion-usuarios form div[style*="grid-template-columns: 1fr 1fr 1fr auto"] {
+        grid-template-columns: 1fr !important;
+        gap: 8px !important;
+    }
+
+    /* -------- BADGES Y TEXTOS PEQUEÑOS -------- */
+    .badge-tickets {
+        font-size: 11px;
+        padding: 3px 8px;
+    }
+
+    .summary-huf {
+        font-size: 13px;
+    }
+
+    /* -------- BOTONES DE ADMIN EN TARJETAS -------- */
+    .acciones-admin-material {
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .acciones-admin-material button {
+        width: 100%;
+    }
+
+    /* -------- LOGO DEL VISOR DE FOTO -------- */
+    .modal-foto-fullscreen img {
+        max-height: 75vh;
+    }
+}
+
+/* ============================================================ */
+/* MOBILE EXTRA PEQUEÑO (pantallas menores a 420px)             */
+/* ============================================================ */
+
+@media (max-width: 420px) {
+
+    header {
+        padding: 8px 10px;
+    }
+
+    .header-brand h1 {
+        font-size: 13px;
+    }
+
+    .header-logo {
+        height: 28px;
+    }
+
+    .btn-tab {
+        padding: 5px 10px;
+        font-size: 11px;
+    }
+
+    .btn-huf {
+        padding: 7px 12px;
+        font-size: 12px;
+    }
+
+    .modal-contenido,
+    .modal-content {
+        width: 98%;
+        padding: 15px;
+    }
+
+    .cajon {
+        min-height: 50px;
+        padding: 4px 2px;
+    }
+
+    .cajon .numero {
+        font-size: 9px;
+    }
+
+    .cajon .material {
+        font-size: 8px;
+    }
+
+    .grid-lockers-tarjetas,
+    #contenedor-lockers,
+    #contenedor-racks {
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)) !important;
+    }
+
+    .contenedor-clientes-lista {
+        grid-template-columns: 1fr;
+    }
+}
