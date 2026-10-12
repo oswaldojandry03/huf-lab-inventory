@@ -9,33 +9,61 @@
 <body>
 
     <!-- HUF HEADER -->
+    <!-- HUF HEADER -->
     <header>
-        <div class="header-brand">
-            <img src="HUFLOGO.PNG" alt="Huf Mexico Logo" class="header-logo">
-            <h1>Control &amp; Inventory Lab</h1>
-        </div>
-        
-        <nav class="nav-tabs" id="nav-tabs-container" style="display: none;">
-            <button class="btn-tab activo" onclick="changeTab(event, 'tab-cabinets')">Cabinets</button>
-            <button class="btn-tab" onclick="changeTab(event, 'tab-lockers')">Lockers / Fixtures</button>
-            <button class="btn-tab" onclick="changeTab(event, 'tab-racks')">Coupons &amp; Racks</button>
-            <button class="btn-tab" onclick="changeTab(event, 'tab-materials')">Materials</button>
-            <button class="btn-tab" onclick="changeTab(event, 'tab-charts'); updateCharts();">Charts</button>
-            <button class="btn-tab" id="btn-tab-history" onclick="changeTab(event, 'tab-history'); renderModificationHistory();">History</button>
-        </nav>
+        <div class="header-top">
+            <div class="header-brand">
+                <img src="HUFLOGO.PNG" alt="Huf Mexico Logo" class="header-logo">
+                <div class="header-brand-text">
+                    <h1>Control &amp; Inventory Lab</h1>
+                    <span class="header-subtitle">Huf Mexico</span>
+                </div>
+            </div>
 
-        <div class="usuario-panel">
-            <span id="usuario-login">Guest</span>
-            <button class="btn-login" id="btn-login-trigger" onclick="openModal('modal-login')">Login</button>
-            <button class="btn-login" id="btn-logout-trigger" style="display: none;" onclick="logout()">Logout</button>
+            <div class="usuario-panel">
+                <div class="usuario-info">
+                    <span class="usuario-icono">👤</span>
+                    <span id="usuario-login">Guest</span>
+                </div>
 
-            <div id="panel-master-acciones" style="display: none; gap: 8px;">
-                <button class="btn-huf-secundario" onclick="openModal('modal-gestion-usuarios')" title="Manage Users">👥 Users</button>
-                <button class="btn-huf-secundario" onclick="exportData()" title="Export Backup">Export</button>
-                <button class="btn-huf-secundario" onclick="document.getElementById('importar-file').click()" title="Import Backup">Import</button>
-                <input type="file" id="importar-file" style="display:none;" accept=".json" onchange="importData(event)">
+                <button class="btn-login" id="btn-login-trigger" onclick="openModal('modal-login')">Login</button>
+                <button class="btn-login btn-logout" id="btn-logout-trigger" style="display: none;" onclick="logout()">Logout</button>
+
+                <div id="panel-master-acciones" class="master-acciones" style="display: none;">
+                    <button class="btn-huf-secundario btn-icon" onclick="openModal('modal-gestion-usuarios')" title="Manage Users">
+                        <span>👥</span> <span class="btn-label">Users</span>
+                    </button>
+                    <button class="btn-huf-secundario btn-icon" onclick="exportData()" title="Export Backup">
+                        <span>📤</span> <span class="btn-label">Export</span>
+                    </button>
+                    <button class="btn-huf-secundario btn-icon" onclick="document.getElementById('importar-file').click()" title="Import Backup">
+                        <span>📥</span> <span class="btn-label">Import</span>
+                    </button>
+                    <input type="file" id="importar-file" style="display:none;" accept=".json" onchange="importData(event)">
+                </div>
             </div>
         </div>
+
+        <nav class="nav-tabs" id="nav-tabs-container" style="display: none;">
+            <button class="btn-tab activo" onclick="changeTab(event, 'tab-cabinets')">
+                <span class="tab-icon">🗄️</span> <span class="tab-label">Cabinets</span>
+            </button>
+            <button class="btn-tab" onclick="changeTab(event, 'tab-lockers')">
+                <span class="tab-icon">🔒</span> <span class="tab-label">Lockers / Fixtures</span>
+            </button>
+            <button class="btn-tab" onclick="changeTab(event, 'tab-racks')">
+                <span class="tab-icon">📐</span> <span class="tab-label">Coupons &amp; Racks</span>
+            </button>
+            <button class="btn-tab" onclick="changeTab(event, 'tab-materials')">
+                <span class="tab-icon">🧰</span> <span class="tab-label">Materials</span>
+            </button>
+            <button class="btn-tab" onclick="changeTab(event, 'tab-charts'); updateCharts();">
+                <span class="tab-icon">📊</span> <span class="tab-label">Charts</span>
+            </button>
+            <button class="btn-tab" id="btn-tab-history" onclick="changeTab(event, 'tab-history'); renderModificationHistory();">
+                <span class="tab-icon">📜</span> <span class="tab-label">History</span>
+            </button>
+        </nav>
     </header>
 
     <!-- RESTRICTED ACCESS -->
@@ -393,6 +421,11 @@
                     <label>Client Name:</label>
                     <input type="text" id="input-nuevo-cliente-nombre" placeholder="Ex: Volkswagen, BMW, Audi..." required>
                 </div>
+                <div class="form-group">
+                    <label>Client Abbreviation (for internal codes):</label>
+                    <input type="text" id="input-nuevo-cliente-abrev" placeholder="Ex: VW, BMW, AU" maxlength="6" required>
+                    <p style="font-size: 11px; color: #6c757d; margin-top: 4px;">Short code used to generate internal recognition numbers (max 6 chars, no spaces)</p>
+                </div>
                 <button type="submit" class="btn-huf" style="width: 100%; margin-top: 10px;">Save Client</button>
             </form>
         </div>
@@ -631,9 +664,9 @@
         </div>
     </div>
 
-    <!-- MODAL: ADD/EDIT RACK PIECE (NUEVO) -->
+    <!-- MODAL: ADD/EDIT RACK PIECE (with new fields) -->
     <div id="modal-editar-pieza-rack" class="modal" style="display: none;">
-        <div class="modal-contenido">
+        <div class="modal-contenido modal-ancho">
             <span class="cerrar" onclick="closeModal('modal-editar-pieza-rack')">&times;</span>
             <h3 id="titulo-modal-pieza-rack" class="modal-titulo-huf">Add Coupon</h3>
             <form onsubmit="saveRackPiece(event)">
@@ -641,33 +674,67 @@
                 <input type="hidden" id="rack-pieza-nivel-id">
                 <input type="hidden" id="rack-pieza-index">
 
-                <div class="form-group">
-                    <label>Coupon / Fixture Name:</label>
-                    <input type="text" id="rack-pieza-nombre" required placeholder="Ex. Coupon C-01">
-                </div>
-
-                <div class="form-group">
-                    <label>Client:</label>
-                    <select id="rack-pieza-cliente" required>
-                        <option value="">-- Select a client --</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label>Project Number (format 0000.000) - Optional:</label>
-                    <div class="mascara-proyecto">
-                        <input type="text" id="rack-proj-part1" placeholder="0000" maxlength="4" pattern="\d{4}"
-                               title="Please enter exactly 4 digits (0-9)"
-                               oninvalid="this.setCustomValidity('Please enter exactly 4 digits (0-9)')"
-                               oninput="this.setCustomValidity('')"
-                               onkeyup="autotab(this, 'rack-proj-part2')">
-                        <span class="separador-punto">.</span>
-                        <input type="text" id="rack-proj-part2" placeholder="003" maxlength="3" pattern="\d{3}"
-                               title="Please enter exactly 3 digits (0-9)"
-                               oninvalid="this.setCustomValidity('Please enter exactly 3 digits (0-9)')"
-                               oninput="this.setCustomValidity('')">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label>Coupon / Fixture Name: *</label>
+                        <input type="text" id="rack-pieza-nombre" required placeholder="Ex. Coupon C-01">
                     </div>
-                    <input type="hidden" id="rack-pieza-proyecto">
+                    <div class="form-group">
+                        <label>Client: *</label>
+                        <select id="rack-pieza-cliente" required onchange="autoFillRackAbbreviation()">
+                            <option value="">-- Select a client --</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label>Client Abbreviation:</label>
+                        <input type="text" id="rack-pieza-abrev" readonly style="background-color: #e9ecef; font-weight: bold; color: #e30613;">
+                    </div>
+                    <div class="form-group">
+                        <label>Year: *</label>
+                        <input type="number" id="rack-pieza-year" min="2000" max="2100" placeholder="Ex: 2025" required onkeyup="updateRackInternalCodes()" onchange="updateRackInternalCodes()">
+                    </div>
+                    <div class="form-group">
+                        <label>Project Number (format 0000.000): *</label>
+                        <div class="mascara-proyecto">
+                            <input type="text" id="rack-proj-part1" placeholder="0000" maxlength="4" pattern="\d{4}" required
+                                    title="Please enter exactly 4 digits (0-9)"
+                                    oninvalid="this.setCustomValidity('Please enter exactly 4 digits (0-9)')"
+                                    oninput="this.setCustomValidity(''); updateRackInternalCodes();"
+                                    onkeyup="autotab(this, 'rack-proj-part2'); updateRackInternalCodes();">
+                            <span class="separador-punto">.</span>
+                            <input type="text" id="rack-proj-part2" placeholder="003" maxlength="3" pattern="\d{3}" required
+                                    title="Please enter exactly 3 digits (0-9)"
+                                    oninvalid="this.setCustomValidity('Please enter exactly 3 digits (0-9)')"
+                                    oninput="this.setCustomValidity(''); updateRackInternalCodes();"
+                                    onkeyup="updateRackInternalCodes()">
+                        </div>
+                        <input type="hidden" id="rack-pieza-proyecto">
+                    </div>
+                </div>
+
+                <!-- SECCIÓN DE POSICIONES DINÁMICAS -->
+                <div class="form-group" style="background: #f8f9fa; padding: 12px; border-radius: 6px; border: 1px solid #dee2e6;">
+                    <label style="font-weight: bold; color: #e30613; margin-bottom: 10px; display: block;">Positions & Quantities *</label>
+                    <p style="font-size: 11px; color: #6c757d; margin-bottom: 10px;">Add positions and assign quantities. You can add multiple positions with the "+ Add Position" button.</p>
+                    
+                    <div id="contenedor-posiciones-rack" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px;">
+                        <!-- Las posiciones dinámicas se generarán aquí -->
+                    </div>
+                    
+                    <button type="button" class="btn-huf-secundario" style="width: 100%; padding: 10px; font-size: 13px;" onclick="agregarPosicionRack()">+ Add Position</button>
+                    
+                    <p style="font-size: 11px; color: #6c757d; margin-top: 8px;">At least one position must have a quantity greater than 0.</p>
+                </div>
+
+                <div class="form-group">
+                    <label>Internal Recognition Code(s) (auto-generated):</label>
+                    <div id="contenedor-codigos-rack" style="display: flex; flex-direction: column; gap: 6px;">
+                        <input type="text" id="rack-pieza-codigo" readonly style="background-color: #fff5f5; font-weight: bold; color: #e30613; font-family: monospace; letter-spacing: 1px;" placeholder="Codes will be generated here">
+                    </div>
+                    <p style="font-size: 11px; color: #6c757d; margin-top: 4px;">Format: ProjectNumber-Year-ClientAbbreviation-PositionAbbreviation | Quantity</p>
                 </div>
 
                 <div class="form-group">
@@ -696,7 +763,7 @@
             <span class="cerrar" onclick="closeModal('modal-visor-foto')">&times;</span>
             <img id="foto-ampliada-src" src="" alt="Enlarged Photo">
         </div>
-    </div>
+    </div> 
 
     <!-- MODAL: GENERATE TICKET -->
     <div id="modal-ticket" class="modal">
@@ -950,6 +1017,7 @@
     <!-- Firebase Compat Scripts -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
     <script src="js/app.js"></script>
 
 </body>

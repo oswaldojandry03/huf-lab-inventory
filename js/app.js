@@ -1,4 +1,4 @@
-console.log("Huf Mexico Lab System Initialized with Firebase, SweetAlert2 and EmailJS");
+console.log("Huf Mexico Lab System Initialized with Firebase Auth, Firestore, SweetAlert2 and EmailJS");
 
 // =============================================================
 // FIREBASE INITIALIZATION
@@ -15,6 +15,7 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+const auth = firebase.auth();
 
 // =============================================================
 // EMAILJS CONFIGURATION
@@ -94,7 +95,7 @@ const Toast = Swal.mixin({
 let inventarioGabinetes = {};
 let listaEstructuraGabinetes = [];
 let inventarioLockers = {};
-let listaEstructuraLockers = [];   // NEW: locker configs (was hardcoded A-G before)
+let listaEstructuraLockers = [];
 let listaEstructuraRacks = [];
 let inventarioRacks = {};
 let listaNacho = [];
@@ -113,6 +114,7 @@ let chartBusquedasInstance = null;
 let chartMaterialesInstance = null;
 
 let usuarioActual = null;
+let usuarioUID = null;
 let rolActual = null;
 
 let indiceEdicionMaterial = null;
@@ -121,6 +123,9 @@ let indiceEliminarMaterial = null;
 let temporizadorLimpiezaBusqueda = null;
 let terminoBusquedaFixtureGlobal = '';
 let contextoFixtureGlobalDesdeLocker = null;
+
+// Variables para posiciones dinámicas de rack
+let contadorPosicionesRack = 0;
 
 function reiniciarTemporizadorInactividadBusqueda() {
     if (temporizadorLimpiezaBusqueda) clearTimeout(temporizadorLimpiezaBusqueda);
@@ -132,43 +137,6 @@ function reiniciarTemporizadorInactividadBusqueda() {
 }
 
 // =============================================================
-// PASSWORD HASHING (SHA-256)
-// =============================================================
-async function hashPassword(password) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(password);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-// =============================================================
-// SESSION PERSISTENCE
-// =============================================================
-const CLAVE_SESION = 'huf_session_active';
-
-function guardarSesionLocal() {
-    try {
-        localStorage.setItem(CLAVE_SESION, JSON.stringify({
-            usuario: usuarioActual,
-            rol: rolActual,
-            timestamp: Date.now()
-        }));
-    } catch (e) { console.warn(e); }
-}
-
-function limpiarSesionLocal() {
-    try { localStorage.removeItem(CLAVE_SESION); } catch (e) { console.warn(e); }
-}
-
-function leerSesionLocal() {
-    try {
-        const raw = localStorage.getItem(CLAVE_SESION);
-        return raw ? JSON.parse(raw) : null;
-    } catch (e) { return null; }
-}
-
-// =============================================================
 // REGISTER MODIFICATION (AUDIT LOG)
 // =============================================================
 async function registrarModificacion(tipo, accion, descripcion, datosAntes, datosDespues, refColeccion, refDocId) {
@@ -177,6 +145,7 @@ async function registrarModificacion(tipo, accion, descripcion, datosAntes, dato
         const registro = {
             tipo, accion, descripcion,
             usuario: usuarioActual,
+            uid: usuarioUID || null,
             rol: rolActual || 'GUEST',
             fecha: new Date().toISOString(),
             fechaLegible: new Date().toLocaleString(),
@@ -197,48 +166,9 @@ async function registrarModificacion(tipo, accion, descripcion, datosAntes, dato
 // =============================================================
 document.addEventListener("DOMContentLoaded", () => {
     escucharFirestore();
-    intentarRestaurarSesion();
 });
 
-async function migrateExistingUsers(snapshot) {
-    const users = {};
-    snapshot.forEach(doc => { users[doc.id] = doc.data(); });
-
-    if (users["Jandry"] && !users["Jandry"].passwordHash) {
-        const hash = await hashPassword("Jandrik.21");
-        await db.collection("usuarios").doc("Jandry").set({
-            email: users["Jandry"].email || "jandry@huf.com",
-            username: "Jandry",
-            location: users["Jandry"].location || "Huf Mexico - Puebla",
-            passwordHash: hash,
-            role: "SUPER_ADMIN",
-            status: "active",
-            createdAt: new Date().toISOString(),
-            approvedAt: new Date().toISOString(),
-            approvedBy: "SYSTEM"
-        });
-        console.log("✅ Jandry migrated to encrypted password");
-    }
-
-    if (users["Nacho"] && !users["Nacho"].passwordHash) {
-        const hash = await hashPassword("Nacho.2026");
-        await db.collection("usuarios").doc("Nacho").set({
-            email: users["Nacho"].email || "nacho@huf.com",
-            username: "Nacho",
-            location: users["Nacho"].location || "Huf Mexico - Poblacion",
-            passwordHash: hash,
-            role: "ADMIN",
-            status: "active",
-            createdAt: new Date().toISOString(),
-            approvedAt: new Date().toISOString(),
-            approvedBy: "SYSTEM"
-        });
-        console.log("✅ Nacho migrated to encrypted password");
-    }
-}
-
 async function crearLockersPorDefecto() {
-    // Auto-create the 7 original lockers (A-G with 5 compartments each) once
     const batch = db.batch();
     const letras = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
     letras.forEach(letra => {
@@ -250,16 +180,9 @@ async function crearLockersPorDefecto() {
 }
 
 function escucharFirestore() {
-    db.collection("usuarios").onSnapshot(async (snapshot) => {
+    db.collection("usuarios").onSnapshot((snapshot) => {
         listaUsuariosFirebase = {};
         snapshot.forEach((doc) => { listaUsuariosFirebase[doc.id] = doc.data(); });
-
-        if (Object.keys(listaUsuariosFirebase).length > 0 && 
-            (listaUsuariosFirebase["Jandry"]?.pass || listaUsuariosFirebase["Nacho"]?.pass)) {
-            await migrateExistingUsers(snapshot);
-            return;
-        }
-
         renderUserTables();
     });
 
@@ -276,14 +199,12 @@ function escucharFirestore() {
         generarGabinetes();
     });
 
-    // NEW: Listen to locker configs
     db.collection("config_lockers").onSnapshot((snapshot) => {
         listaEstructuraLockers = [];
         snapshot.forEach((doc) => { listaEstructuraLockers.push({ id: doc.id, ...doc.data() }); });
         if (listaEstructuraLockers.length === 0) {
             crearLockersPorDefecto();
         } else {
-            // Sort by name (Locker A, Locker B...)
             listaEstructuraLockers.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
             generarTarjetasLockers();
         }
@@ -357,28 +278,48 @@ function escucharFirestore() {
 }
 
 // =============================================================
-// SESSION RESTORE
+// FIREBASE AUTH STATE LISTENER
 // =============================================================
-function intentarRestaurarSesion() {
-    const sesion = leerSesionLocal();
-    if (!sesion || !sesion.usuario || !sesion.rol) return;
+auth.onAuthStateChanged(async (user) => {
+    if (user) {
+        usuarioUID = user.uid;
+        let intentos = 0;
+        const maxIntentos = 20;
+        const intervalo = setInterval(() => {
+            intentos++;
+            const perfil = listaUsuariosFirebase[user.uid];
+            if (perfil) {
+                usuarioActual = perfil.username || user.email;
+                rolActual = perfil.role || 'USER';
+                aplicarInterfazSesionIniciada();
+                clearInterval(intervalo);
+            } else if (intentos >= maxIntentos) {
+                clearInterval(intervalo);
+                console.warn("No profile found for UID:", user.uid);
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Profile not found',
+                    text: 'Your account exists but no profile was found. Contact a Master.',
+                    confirmButtonColor: '#e30613'
+                });
+            }
+        }, 200);
+    } else {
+        usuarioActual = null;
+        usuarioUID = null;
+        rolActual = null;
+        mostrarBloqueoPantalla();
+    }
+});
 
-    let intentos = 0;
-    const maxIntentos = 20;
-    const intervalo = setInterval(() => {
-        intentos++;
-        const user = listaUsuariosFirebase[sesion.usuario];
-        if (user) {
-            usuarioActual = sesion.usuario;
-            rolActual = user.role || sesion.rol;
-            guardarSesionLocal();
-            aplicarInterfazSesionIniciada();
-            clearInterval(intervalo);
-        } else if (intentos >= maxIntentos) {
-            clearInterval(intervalo);
-            limpiarSesionLocal();
-        }
-    }, 100);
+function mostrarBloqueoPantalla() {
+    document.getElementById('bloqueo-pantalla').style.display = 'block';
+    document.getElementById('contenido-protegido').style.display = 'none';
+    document.getElementById('nav-tabs-container').style.display = 'none';
+    document.getElementById('usuario-login').textContent = "Guest";
+    document.getElementById('btn-login-trigger').style.display = 'inline-block';
+    document.getElementById('btn-logout-trigger').style.display = 'none';
+    document.getElementById('panel-master-acciones').style.display = 'none';
 }
 
 function aplicarInterfazSesionIniciada() {
@@ -406,30 +347,19 @@ function aplicarInterfazSesionIniciada() {
     const esAdmin = (rolActual === "SUPER_ADMIN" || rolActual === "ADMIN");
 
     const btnAddClient = document.getElementById('btn-agregar-cliente');
-    if (btnAddClient) {
-        btnAddClient.style.display = esAdmin ? 'inline-block' : 'none';
-    }
+    if (btnAddClient) btnAddClient.style.display = esAdmin ? 'inline-block' : 'none';
 
     const btnAddClientList = document.getElementById('btn-agregar-cliente-lista-global');
-    if (btnAddClientList) {
-        btnAddClientList.style.display = esAdmin ? 'inline-block' : 'none';
-    }
+    if (btnAddClientList) btnAddClientList.style.display = esAdmin ? 'inline-block' : 'none';
 
     const btnHistory = document.getElementById('btn-tab-history');
-    if (btnHistory) {
-        btnHistory.style.display = esAdmin ? 'inline-block' : 'none';
-    }
+    if (btnHistory) btnHistory.style.display = esAdmin ? 'inline-block' : 'none';
 
     const panelRacks = document.getElementById('panel-admin-racks');
-    if (panelRacks) {
-        panelRacks.style.display = esAdmin ? 'block' : 'none';
-    }
+    if (panelRacks) panelRacks.style.display = esAdmin ? 'block' : 'none';
 
-    // NEW: show/hide "Create Locker" button
     const panelLockers = document.getElementById('panel-admin-lockers');
-    if (panelLockers) {
-        panelLockers.style.display = esAdmin ? 'block' : 'none';
-    }
+    if (panelLockers) panelLockers.style.display = esAdmin ? 'block' : 'none';
 
     if (esAdmin) {
         document.getElementById('panel-admin-nacho').style.display = 'block';
@@ -481,43 +411,72 @@ function openModal(id) { document.getElementById(id).style.display = 'block'; }
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
 // =============================================================
-// LOGIN / LOGOUT / REGISTRATION
+// LOGIN / LOGOUT / REGISTRATION (NOW WITH FIREBASE AUTH)
 // =============================================================
 async function login(event) {
     event.preventDefault();
-    const u = document.getElementById('usuario').value.trim();
-    const p = document.getElementById('password').value.trim();
+    const emailInput = document.getElementById('usuario').value.trim();
+    const password = document.getElementById('password').value;
     const err = document.getElementById('mensaje-error-login');
 
-    const user = listaUsuariosFirebase[u];
-    if (!user) {
-        err.textContent = "User not found.";
-        err.style.display = 'block';
-        return;
+    let emailToUse = emailInput;
+
+    if (!emailInput.includes('@')) {
+        let foundUser = null;
+        for (const uid in listaUsuariosFirebase) {
+            const u = listaUsuariosFirebase[uid];
+            if (u.username && u.username.toLowerCase() === emailInput.toLowerCase()) {
+                foundUser = u;
+                break;
+            }
+        }
+        if (foundUser && foundUser.email) {
+            emailToUse = foundUser.email;
+        } else {
+            err.textContent = "User not found. Please use your email.";
+            err.style.display = 'block';
+            return;
+        }
     }
 
-    if (user.status === "pending") {
-        err.textContent = "Your account is pending approval by a Master.";
-        err.style.display = 'block';
-        return;
-    }
-    if (user.status === "rejected") {
-        err.textContent = "Your account has been rejected.";
-        err.style.display = 'block';
-        return;
-    }
+    try {
+        const credential = await auth.signInWithEmailAndPassword(emailToUse, password);
+        const uid = credential.user.uid;
 
-    const hash = await hashPassword(p);
-    if (user.passwordHash === hash) {
-        usuarioActual = u;
-        rolActual = user.role;
-        guardarSesionLocal();
+        const profile = listaUsuariosFirebase[uid];
+        if (!profile) {
+            err.textContent = "Your account exists but no profile was found. Contact a Master.";
+            err.style.display = 'block';
+            await auth.signOut();
+            return;
+        }
+        if (profile.status === "pending") {
+            err.textContent = "Your account is pending approval by a Master.";
+            err.style.display = 'block';
+            await auth.signOut();
+            return;
+        }
+        if (profile.status === "rejected") {
+            err.textContent = "Your account has been rejected.";
+            err.style.display = 'block';
+            await auth.signOut();
+            return;
+        }
+
         err.style.display = 'none';
         closeModal('modal-login');
-        aplicarInterfazSesionIniciada();
-        Toast.fire({ icon: 'success', title: `Welcome, ${u}!` });
-    } else {
-        err.textContent = "Incorrect password.";
+        Toast.fire({ icon: 'success', title: `Welcome, ${profile.username || emailToUse}!` });
+    } catch (error) {
+        console.error("Login error:", error);
+        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+            err.textContent = "Incorrect email or password.";
+        } else if (error.code === 'auth/invalid-email') {
+            err.textContent = "Invalid email format.";
+        } else if (error.code === 'auth/too-many-requests') {
+            err.textContent = "Too many attempts. Please try again later.";
+        } else {
+            err.textContent = "Login failed. Please try again.";
+        }
         err.style.display = 'block';
     }
 }
@@ -537,83 +496,87 @@ async function registerNewUser(event) {
         return;
     }
 
-    if (listaUsuariosFirebase[username]) {
-        err.textContent = "That username is already taken.";
+    if (p1.length < 6) {
+        err.textContent = "Password must be at least 6 characters.";
         err.style.display = 'block';
         return;
     }
 
-    for (const k in listaUsuariosFirebase) {
-        if (listaUsuariosFirebase[k].email === email) {
-            err.textContent = "That email is already registered.";
+    for (const uid in listaUsuariosFirebase) {
+        const u = listaUsuariosFirebase[uid];
+        if (u.username && u.username.toLowerCase() === username.toLowerCase()) {
+            err.textContent = "That username is already taken.";
             err.style.display = 'block';
             return;
         }
     }
 
-    const hash = await hashPassword(p1);
+    try {
+        const credential = await auth.createUserWithEmailAndPassword(email, p1);
+        const uid = credential.user.uid;
 
-    await db.collection("usuarios").doc(username).set({
-        email: email,
-        username: username,
-        location: location,
-        passwordHash: hash,
-        role: "EXTERNAL",
-        status: "pending",
-        createdAt: new Date().toISOString()
-    });
+        await db.collection("usuarios").doc(uid).set({
+            email: email,
+            username: username,
+            location: location,
+            role: "EXTERNAL",
+            status: "pending",
+            createdAt: new Date().toISOString()
+        });
 
-    await registrarModificacion(
-        'USUARIO',
-        'CREAR',
-        `New registration request: "${username}" (${email}) from ${location}`,
-        null,
-        { username, email, location, role: 'EXTERNAL', status: 'pending' },
-        'usuarios',
-        username
-    );
+        await registrarModificacion(
+            'USUARIO',
+            'CREAR',
+            `New registration request: "${username}" (${email}) from ${location}`,
+            null,
+            { username, email, location, role: 'EXTERNAL', status: 'pending' },
+            'usuarios',
+            uid
+        );
 
-    await sendEmailNotification('master', {
-        username: username,
-        user_email: email,
-        location: location
-    });
+        await sendEmailNotification('master', {
+            username: username,
+            user_email: email,
+            location: location
+        });
 
-    closeModal('modal-registro');
-    document.getElementById('reg-email').value = '';
-    document.getElementById('reg-username').value = '';
-    document.getElementById('reg-location').value = '';
-    document.getElementById('reg-password').value = '';
-    document.getElementById('reg-password2').value = '';
+        await auth.signOut();
 
-    Swal.fire({
-        icon: 'success',
-        title: 'Registration Sent!',
-        html: `Your account request has been sent.<br>A Master will review and approve it soon.`,
-        confirmButtonColor: '#e30613'
-    });
+        closeModal('modal-registro');
+        document.getElementById('reg-email').value = '';
+        document.getElementById('reg-username').value = '';
+        document.getElementById('reg-location').value = '';
+        document.getElementById('reg-password').value = '';
+        document.getElementById('reg-password2').value = '';
+
+        Swal.fire({
+            icon: 'success',
+            title: 'Registration Sent!',
+            html: `Your account request has been sent.<br>A Master will review and approve it soon.`,
+            confirmButtonColor: '#e30613'
+        });
+    } catch (error) {
+        console.error("Registration error:", error);
+        if (error.code === 'auth/email-already-in-use') {
+            err.textContent = "That email is already registered.";
+        } else if (error.code === 'auth/invalid-email') {
+            err.textContent = "Invalid email format.";
+        } else if (error.code === 'auth/weak-password') {
+            err.textContent = "Password is too weak.";
+        } else {
+            err.textContent = "Registration failed. Please try again.";
+        }
+        err.style.display = 'block';
+    }
 }
 
-function logout() {
-    usuarioActual = null;
-    rolActual = null;
-    limpiarSesionLocal();
-
-    document.getElementById('usuario-login').textContent = "Guest";
-    document.getElementById('btn-login-trigger').style.display = 'inline-block';
-    document.getElementById('btn-logout-trigger').style.display = 'none';
-    document.getElementById('panel-master-acciones').style.display = 'none';
-    document.getElementById('panel-admin-nacho').style.display = 'none';
-    document.getElementById('panel-admin-clientes').style.display = 'none';
-    document.getElementById('panel-admin-gabinetes').style.display = 'none';
-    document.getElementById('panel-admin-racks').style.display = 'none';
-    document.getElementById('panel-admin-lockers').style.display = 'none';
-
-    document.getElementById('bloqueo-pantalla').style.display = 'block';
-    document.getElementById('contenido-protegido').style.display = 'none';
-    document.getElementById('nav-tabs-container').style.display = 'none';
-
-    Toast.fire({ icon: 'info', title: 'Session closed successfully' });
+async function logout() {
+    try {
+        await auth.signOut();
+        Toast.fire({ icon: 'info', title: 'Session closed successfully' });
+    } catch (error) {
+        console.error("Logout error:", error);
+    }
 }
 
 // =============================================================
@@ -630,8 +593,8 @@ function renderUserTables() {
     let countPending = 0;
     let countActive = 0;
 
-    for (const u in listaUsuariosFirebase) {
-        const info = listaUsuariosFirebase[u];
+    for (const uid in listaUsuariosFirebase) {
+        const info = listaUsuariosFirebase[uid];
 
         if (info.status === "pending") {
             countPending++;
@@ -639,13 +602,13 @@ function renderUserTables() {
             item.style.cssText = "background: #fff3cd; border: 1px solid #ffeeba; border-radius: 6px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;";
             item.innerHTML = `
                 <div>
-                    <strong style="color: #856404;">${info.username || u}</strong>
+                    <strong style="color: #856404;">${info.username || uid}</strong>
                     <p style="margin: 2px 0 0 0; font-size: 12px; color: #495057;">📧 ${info.email || 'N/A'}</p>
                     <p style="margin: 0; font-size: 12px; color: #495057;">📍 ${info.location || 'N/A'}</p>
                 </div>
                 <div style="display: flex; gap: 6px;">
-                    <button class="btn-huf" style="padding: 6px 12px; font-size: 12px;" onclick="approveUser('${u}')">✓ Approve</button>
-                    <button class="btn-huf-secundario" style="padding: 6px 12px; font-size: 12px; background-color: #e30613;" onclick="rejectUser('${u}')">✕ Reject</button>
+                    <button class="btn-huf" style="padding: 6px 12px; font-size: 12px;" onclick="approveUser('${uid}')">✓ Approve</button>
+                    <button class="btn-huf-secundario" style="padding: 6px 12px; font-size: 12px; background-color: #e30613;" onclick="rejectUser('${uid}')">✕ Reject</button>
                 </div>
             `;
             pendientes.appendChild(item);
@@ -654,9 +617,9 @@ function renderUserTables() {
             const item = document.createElement('div');
             item.style.cssText = "background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;";
             const esMaster = info.role === "SUPER_ADMIN";
-            
+
             const roleOptions = `
-                <select onchange="changeUserRole('${u}', this.value)" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #ced4da; font-size: 12px; background: #fff;" ${esMaster ? 'disabled' : ''}>
+                <select onchange="changeUserRole('${uid}', this.value)" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #ced4da; font-size: 12px; background: #fff;" ${esMaster ? 'disabled' : ''}>
                     <option value="EXTERNAL" ${info.role === 'EXTERNAL' ? 'selected' : ''}>EXTERNAL</option>
                     <option value="USER" ${info.role === 'USER' ? 'selected' : ''}>USER</option>
                     <option value="ADMIN" ${info.role === 'ADMIN' ? 'selected' : ''}>ADMIN</option>
@@ -664,11 +627,11 @@ function renderUserTables() {
                 </select>
             `;
 
-            const btnEliminar = esMaster ? '' : `<button onclick="deleteUser('${u}')" style="background: none; border: none; color: #e30613; cursor: pointer; font-weight: bold; font-size: 18px;">&times;</button>`;
+            const btnEliminar = esMaster ? '' : `<button onclick="deleteUser('${uid}')" style="background: none; border: none; color: #e30613; cursor: pointer; font-weight: bold; font-size: 18px;">&times;</button>`;
 
             item.innerHTML = `
                 <div>
-                    <strong>${info.username || u}</strong> <span style="font-size: 11px; color: #6c757d;">(${info.role})</span>
+                    <strong>${info.username || uid}</strong> <span style="font-size: 11px; color: #6c757d;">(${info.role})</span>
                     <p style="margin: 2px 0 0 0; font-size: 11px; color: #6c757d;">📧 ${info.email || 'N/A'} · 📍 ${info.location || 'N/A'}</p>
                 </div>
                 <div style="display: flex; gap: 8px; align-items: center;">
@@ -688,14 +651,14 @@ function renderUserTables() {
     }
 }
 
-async function approveUser(username) {
+async function approveUser(uid) {
     if (rolActual !== "SUPER_ADMIN") return;
 
-    const user = listaUsuariosFirebase[username];
+    const user = listaUsuariosFirebase[uid];
     if (!user) return;
 
     const { value: role } = await Swal.fire({
-        title: `Approve "${username}"`,
+        title: `Approve "${user.username || uid}"`,
         html: `<p style="font-size: 13px; color: #495057; text-align: left; margin-bottom: 10px;">📧 ${user.email || 'N/A'}<br>📍 ${user.location || 'N/A'}</p><p style="font-size: 13px; text-align: left;">Select the role for this user:</p>`,
         input: 'select',
         inputOptions: {
@@ -713,7 +676,7 @@ async function approveUser(username) {
 
     if (!role) return;
 
-    await db.collection("usuarios").doc(username).update({
+    await db.collection("usuarios").doc(uid).update({
         status: "active",
         role: role,
         approvedAt: new Date().toISOString(),
@@ -723,29 +686,32 @@ async function approveUser(username) {
     await registrarModificacion(
         'USUARIO',
         'EDITAR',
-        `User "${username}" approved with role ${role}`,
+        `User "${user.username || uid}" approved with role ${role}`,
         { status: 'pending', role: 'EXTERNAL' },
         { status: 'active', role: role },
         'usuarios',
-        username
+        uid
     );
 
     if (user.email) {
         await sendEmailNotification('approved', {
-            username: username,
+            username: user.username || uid,
             to_email: user.email,
             role: role
         });
     }
 
-    Toast.fire({ icon: 'success', title: `User "${username}" approved as ${role}` });
+    Toast.fire({ icon: 'success', title: `User approved as ${role}` });
 }
 
-async function rejectUser(username) {
+async function rejectUser(uid) {
     if (rolActual !== "SUPER_ADMIN") return;
 
+    const user = listaUsuariosFirebase[uid];
+    if (!user) return;
+
     const res = await Swal.fire({
-        title: `Reject "${username}"?`,
+        title: `Reject "${user.username || uid}"?`,
         text: "The account will be marked as rejected and cannot log in.",
         icon: 'warning',
         showCancelButton: true,
@@ -757,7 +723,7 @@ async function rejectUser(username) {
 
     if (!res.isConfirmed) return;
 
-    await db.collection("usuarios").doc(username).update({
+    await db.collection("usuarios").doc(uid).update({
         status: "rejected",
         rejectedAt: new Date().toISOString(),
         rejectedBy: usuarioActual
@@ -766,44 +732,44 @@ async function rejectUser(username) {
     await registrarModificacion(
         'USUARIO',
         'EDITAR',
-        `User "${username}" registration rejected`,
+        `User "${user.username || uid}" registration rejected`,
         { status: 'pending' },
         { status: 'rejected' },
         'usuarios',
-        username
+        uid
     );
 
-    Toast.fire({ icon: 'success', title: `User "${username}" rejected` });
+    Toast.fire({ icon: 'success', title: `User rejected` });
 }
 
-async function changeUserRole(username, newRole) {
+async function changeUserRole(uid, newRole) {
     if (rolActual !== "SUPER_ADMIN") return;
-    const user = listaUsuariosFirebase[username];
+    const user = listaUsuariosFirebase[uid];
     if (!user || user.role === "SUPER_ADMIN") return;
 
-    await db.collection("usuarios").doc(username).update({ role: newRole });
+    await db.collection("usuarios").doc(uid).update({ role: newRole });
 
     await registrarModificacion(
         'USUARIO',
         'EDITAR',
-        `User "${username}" role changed from ${user.role} to ${newRole}`,
+        `User "${user.username || uid}" role changed from ${user.role} to ${newRole}`,
         { role: user.role },
         { role: newRole },
         'usuarios',
-        username
+        uid
     );
 
     Toast.fire({ icon: 'success', title: `Role updated to ${newRole}` });
 }
 
-async function deleteUser(username) {
+async function deleteUser(uid) {
     if (rolActual !== "SUPER_ADMIN") return;
-    const user = listaUsuariosFirebase[username];
+    const user = listaUsuariosFirebase[uid];
     if (!user || user.role === "SUPER_ADMIN") return;
 
     const res = await Swal.fire({
-        title: `Delete "${username}"?`,
-        text: "The user account will be permanently removed.",
+        title: `Delete "${user.username || uid}"?`,
+        text: "The user profile will be removed from Firestore. The Auth account must be deleted separately from Firebase Console.",
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#e30613',
@@ -813,9 +779,9 @@ async function deleteUser(username) {
     });
 
     if (res.isConfirmed) {
-        await db.collection("usuarios").doc(username).delete();
-        await registrarModificacion('USUARIO', 'ELIMINAR', `User "${username}" deleted`, { username }, null, 'usuarios', username);
-        Toast.fire({ icon: 'success', title: 'User deleted' });
+        await db.collection("usuarios").doc(uid).delete();
+        await registrarModificacion('USUARIO', 'ELIMINAR', `User profile "${user.username || uid}" deleted`, { username: user.username }, null, 'usuarios', uid);
+        Toast.fire({ icon: 'success', title: 'User profile deleted' });
     }
 }
 
@@ -829,7 +795,7 @@ function poblarSelectClientes() {
         listaClientesFirebase.forEach((c) => {
             const option = document.createElement('option');
             option.value = c.nombre;
-            option.textContent = c.nombre;
+            option.textContent = c.nombre + (c.abreviatura ? ` (${c.abreviatura})` : '');
             select.appendChild(option);
         });
     }
@@ -840,7 +806,7 @@ function poblarSelectClientes() {
         listaClientesFirebase.forEach((c) => {
             const option = document.createElement('option');
             option.value = c.nombre;
-            option.textContent = c.nombre;
+            option.textContent = c.nombre + (c.abreviatura ? ` (${c.abreviatura})` : '');
             selectGlobal.appendChild(option);
         });
     }
@@ -851,7 +817,7 @@ function poblarSelectClientes() {
         listaClientesFirebase.forEach((c) => {
             const option = document.createElement('option');
             option.value = c.nombre;
-            option.textContent = c.nombre;
+            option.textContent = c.nombre + (c.abreviatura ? ` (${c.abreviatura})` : '');
             selectRack.appendChild(option);
         });
     }
@@ -877,7 +843,7 @@ function renderizarTablaClientes() {
         if (esAdmin) {
             botonesHTML = `
                 <div style="display: flex; gap: 6px; align-items: center;">
-                    <button class="btn-editar-pieza" onclick="editClientName('${c.id}', '${c.nombre}')" title="Edit Client">✏️</button>
+                    <button class="btn-editar-pieza" onclick="editClientName('${c.id}', '${c.nombre}', '${c.abreviatura || ''}')" title="Edit Client">✏️</button>
                     <button class="btn-eliminar-cliente" onclick="confirmDeleteClient('${c.id}', '${c.nombre}')" title="Delete Client">&times;</button>
                 </div>
             `;
@@ -885,58 +851,133 @@ function renderizarTablaClientes() {
             botonesHTML = `<span style="font-size: 11px; color: #adb5bd; font-style: italic;">Read only</span>`;
         }
 
-        tarjeta.innerHTML = `<span>${c.nombre}</span>${botonesHTML}`;
+        const abrevHTML = c.abreviatura ? `<span style="font-size: 11px; color: #6c757d; margin-left: 6px;">(${c.abreviatura})</span>` : '';
+        tarjeta.innerHTML = `<span>${c.nombre}${abrevHTML}</span>${botonesHTML}`;
         contenedor.appendChild(tarjeta);
     });
 }
 
 async function saveNewClient(event) {
     event.preventDefault();
-    
+
     if (rolActual !== "SUPER_ADMIN" && rolActual !== "ADMIN") {
-        Swal.fire({ 
-            icon: 'error', 
-            title: 'Insufficient permissions', 
-            text: 'Only administrators can add new clients.', 
-            confirmButtonColor: '#e30613' 
+        Swal.fire({
+            icon: 'error',
+            title: 'Insufficient permissions',
+            text: 'Only administrators can add new clients.',
+            confirmButtonColor: '#e30613'
         });
         return;
     }
-    
-    const nombreInput = document.getElementById('input-nuevo-cliente-nombre');
-    const nombreVal = nombreInput.value.trim();
 
-    if (nombreVal) {
-        try {
-            const docRef = await db.collection("clientes").add({ nombre: nombreVal });
-            await registrarModificacion('CLIENTE', 'CREAR', `Client "${nombreVal}" added`, null, { nombre: nombreVal }, 'clientes', docRef.id);
-            nombreInput.value = '';
-            closeModal('modal-nuevo-cliente');
-            Toast.fire({ icon: 'success', title: `Client "${nombreVal}" added` });
-        } catch (error) {
-            Swal.fire({ icon: 'error', title: 'Error', text: 'Could not save the client.' });
+    const nombreInput = document.getElementById('input-nuevo-cliente-nombre');
+    const abrevInput = document.getElementById('input-nuevo-cliente-abrev');
+    const nombreVal = nombreInput.value.trim();
+    const abrevVal = abrevInput ? abrevInput.value.trim() : '';
+
+    if (!nombreVal) return;
+
+    // Check for duplicate name
+    for (const c of listaClientesFirebase) {
+        if (c.nombre.toLowerCase() === nombreVal.toLowerCase()) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Duplicate client',
+                text: `A client named "${nombreVal}" already exists.`,
+                confirmButtonColor: '#e30613'
+            });
+            return;
         }
+    }
+
+    // Check for duplicate abbreviation
+    if (abrevVal) {
+        for (const c of listaClientesFirebase) {
+            if (c.abreviatura && c.abreviatura.toLowerCase() === abrevVal.toLowerCase()) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Duplicate abbreviation',
+                    text: `The abbreviation "${abrevVal}" is already in use by "${c.nombre}". Please choose a different one.`,
+                    confirmButtonColor: '#e30613'
+                });
+                return;
+            }
+        }
+    }
+
+    try {
+        const docRef = await db.collection("clientes").add({
+            nombre: nombreVal,
+            abreviatura: abrevVal
+        });
+        await registrarModificacion('CLIENTE', 'CREAR', `Client "${nombreVal}" added`, null, { nombre: nombreVal, abreviatura: abrevVal }, 'clientes', docRef.id);
+        nombreInput.value = '';
+        if (abrevInput) abrevInput.value = '';
+        closeModal('modal-nuevo-cliente');
+        Toast.fire({ icon: 'success', title: `Client "${nombreVal}" added` });
+    } catch (error) {
+        Swal.fire({ icon: 'error', title: 'Error', text: 'Could not save the client.' });
     }
 }
 
-async function editClientName(id, nombreActual) {
+async function editClientName(id, nombreActual, abrevActual) {
     if (rolActual !== "SUPER_ADMIN" && rolActual !== "ADMIN") {
         Swal.fire({ icon: 'error', title: 'Insufficient permissions', text: 'Only administrators can edit existing clients.', confirmButtonColor: '#e30613' });
         return;
     }
 
-    const { value: nuevoNombre } = await Swal.fire({
-        title: 'Edit client name',
-        input: 'text', inputValue: nombreActual,
-        showCancelButton: true, confirmButtonText: 'Save', cancelButtonText: 'Cancel',
+    const { value: formValues } = await Swal.fire({
+        title: 'Edit client',
+        html: `
+            <input id="swal-nombre" class="swal2-input" placeholder="Client Name" value="${nombreActual.replace(/"/g, '&quot;')}">
+            <input id="swal-abrev" class="swal2-input" placeholder="Abbreviation (max 6)" maxlength="6" value="${(abrevActual || '').replace(/"/g, '&quot;')}">
+        `,
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonText: 'Save',
+        cancelButtonText: 'Cancel',
         confirmButtonColor: '#e30613',
-        inputValidator: (value) => { if (!value || !value.trim()) return 'Name cannot be empty!'; }
+        preConfirm: () => {
+            const nombre = document.getElementById('swal-nombre').value.trim();
+            const abrev = document.getElementById('swal-abrev').value.trim();
+            if (!nombre) {
+                Swal.showValidationMessage('Name cannot be empty!');
+                return false;
+            }
+            return { nombre, abrev };
+        }
     });
 
-    if (nuevoNombre && nuevoNombre.trim() !== nombreActual) {
+    if (formValues && formValues.nombre) {
+        // Check for duplicate abbreviation (excluding current client)
+        if (formValues.abrev) {
+            for (const c of listaClientesFirebase) {
+                if (c.id !== id && c.abreviatura && c.abreviatura.toLowerCase() === formValues.abrev.toLowerCase()) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Duplicate abbreviation',
+                        text: `The abbreviation "${formValues.abrev}" is already in use by "${c.nombre}". Please choose a different one.`,
+                        confirmButtonColor: '#e30613'
+                    });
+                    return;
+                }
+            }
+        }
+
         try {
-            await db.collection("clientes").doc(id).update({ nombre: nuevoNombre.trim() });
-            await registrarModificacion('CLIENTE', 'EDITAR', `Client "${nombreActual}" → "${nuevoNombre.trim()}"`, { nombre: nombreActual }, { nombre: nuevoNombre.trim() }, 'clientes', id);
+            await db.collection("clientes").doc(id).update({
+                nombre: formValues.nombre,
+                abreviatura: formValues.abrev
+            });
+            await registrarModificacion(
+                'CLIENTE',
+                'EDITAR',
+                `Client "${nombreActual}" edited`,
+                { nombre: nombreActual, abreviatura: abrevActual || '' },
+                { nombre: formValues.nombre, abreviatura: formValues.abrev },
+                'clientes',
+                id
+            );
             Toast.fire({ icon: 'success', title: 'Client updated' });
         } catch (error) {
             Swal.fire({ icon: 'error', title: 'Error', text: 'Could not update the client.' });
@@ -984,7 +1025,8 @@ function exportData() {
         inv_tickets: listaTickets,
         historial_busquedas: historialBusquedasGabinetes,
         historial_graficas: historialGraficasGuardado,
-        lista_fixtures_global: listaFixturesGlobales
+        lista_fixtures_global: listaFixturesGlobales,
+        clientes: listaClientesFirebase
     };
 
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(dataBackup, null, 2));
@@ -1292,7 +1334,7 @@ async function saveCabinetStructure(event) {
         datosGabinete.colIzqFilas = parseInt(document.getElementById('custom-col-izq-filas').value) || 3;
         datosGabinete.colCentroCols = parseInt(document.getElementById('custom-col-centro-cols').value) || 4;
         datosGabinete.colCentroFilas = parseInt(document.getElementById('custom-col-centro-filas').value) || 5;
-        datosGabinete.colDerFilas = parseInt(document.getElementById('custom-col-der-filas').value) || 3;
+        datosGabinetecolDerFilas = parseInt(document.getElementById('custom-col-der-filas').value) || 3;
     } else {
         datosGabinete.cant = parseInt(document.getElementById('gabinete-cant-input').value) || 30;
     }
@@ -1370,7 +1412,6 @@ function searchLockers(event) {
     if (!termino) return;
     let resultados = [];
 
-    // Iterate through the dynamic structure
     listaEstructuraLockers.forEach(locker => {
         for (let d = 1; d <= locker.niveles; d++) {
             const key = `${locker.id}-${d}`;
@@ -1408,7 +1449,7 @@ function searchLockers(event) {
 }
 
 // =============================================================
-// 2. LOCKERS & FIXTURES (NOW WITH CRUD)
+// 2. LOCKERS & FIXTURES
 // =============================================================
 function generarTarjetasLockers() {
     const contenedor = document.getElementById('contenedor-lockers');
@@ -1591,9 +1632,41 @@ function openLockerDetail(lockerId) {
 }
 
 function viewFullFixtureDetail(fixture) {
-    const imagenHTML = fixture.foto 
-        ? `<img src="${fixture.foto}" style="max-width: 100%; max-height: 250px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #dee2e6;">` 
+    const imagenHTML = fixture.foto
+        ? `<img src="${fixture.foto}" style="max-width: 100%; max-height: 250px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #dee2e6;">`
         : '<p style="color: #6c757d; font-style: italic; margin-bottom: 15px;">No photo attached</p>';
+
+    // Sección de códigos internos (solo si existen)
+    let codigosHTML = '';
+    if (fixture.codigosInternos && fixture.codigosInternos.length > 0) {
+        codigosHTML = `
+            <hr style="margin: 15px 0; border: none; border-top: 1px solid #e9ecef;">
+            <p style="margin: 0 0 8px 0;"><strong>🔢 Internal Recognition Codes:</strong></p>
+            <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 15px;">
+        `;
+        fixture.codigosInternos.forEach(cod => {
+            codigosHTML += `
+                <div style="background: #fff5f5; border: 1px solid #ffc9c9; border-radius: 6px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                    <span style="font-family: monospace; font-weight: bold; color: #e30613; font-size: 13px;">${cod.codigo}</span>
+                    <span style="background: #e30613; color: white; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: bold; white-space: nowrap;">Cantidad: ${cod.cantidad}</span>
+                </div>
+            `;
+        });
+        codigosHTML += `</div>`;
+    }
+
+    // Sección de posiciones (solo si existen)
+    let posicionesHTML = '';
+    if (fixture.posiciones && fixture.posiciones.length > 0) {
+        posicionesHTML = `
+            <p style="margin: 0 0 6px 0;"><strong>Positions & Quantities:</strong></p>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 15px;">
+        `;
+        fixture.posiciones.forEach(pos => {
+            posicionesHTML += `<span style="background: #e9ecef; padding: 4px 10px; border-radius: 6px; font-size: 12px; color: #495057;"><strong>${pos.abreviatura}</strong>: ${pos.cantidad}</span>`;
+        });
+        posicionesHTML += `</div>`;
+    }
 
     Swal.fire({
         title: fixture.nombre,
@@ -1603,6 +1676,9 @@ function viewFullFixtureDetail(fixture) {
                 <p><strong>Client:</strong> ${fixture.cliente || 'N/A'}</p>
                 <p><strong>Location:</strong> ${fixture.localidad || 'N/A'}</p>
                 <p><strong>Project:</strong> ${fixture.proyecto || 'N/A'}</p>
+                ${fixture.year ? `<p><strong>Year:</strong> ${fixture.year}</p>` : ''}
+                ${codigosHTML}
+                ${posicionesHTML}
                 <hr style="margin: 10px 0;">
                 <p><strong>Full description:</strong></p>
                 <div style="background: #f8f9fa; padding: 10px; border-radius: 6px; border: 1px solid #e9ecef; max-height: 200px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;">
@@ -1728,7 +1804,7 @@ async function saveLockerPiece(event) {
     await registrarModificacion(
         'LOCKER',
         index === "" ? 'CREAR' : 'EDITAR',
-        index === "" 
+        index === ""
             ? `Fixture "${piezaData.nombre}" added to compartment ${divNum} (locker ${lockerId})`
             : `Fixture "${piezaData.nombre}" edited in compartment ${divNum} (locker ${lockerId})`,
         piezaAnterior, piezaData, 'lockers', key
@@ -1775,7 +1851,7 @@ function enlargePhoto(src) {
 }
 
 // =============================================================
-// 2.B RACKS & COUPONS
+// 2.B RACKS & COUPONS (CON POSICIONES DINÁMICAS)
 // =============================================================
 function generarTarjetasRacks() {
     const contenedor = document.getElementById('contenedor-racks');
@@ -1925,6 +2001,26 @@ function openRackDetail(rackId) {
 
                 const fixtureJSON = JSON.stringify(p).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
 
+                // Generar HTML de códigos (uno por posición con cantidad > 0)
+                let codigosHTML = '';
+                if (p.codigosInternos && p.codigosInternos.length > 0) {
+                    codigosHTML = '<div style="margin: 6px 0; display: flex; flex-direction: column; gap: 3px;">';
+                    p.codigosInternos.forEach(cod => {
+                        codigosHTML += `<span style="font-family: monospace; font-size: 11px; color: #e30613; font-weight: bold; background: #fff5f5; padding: 3px 8px; border-radius: 4px; border: 1px solid #ffc9c9; display: inline-block; width: fit-content;">🔢 ${cod.codigo} <span style="color: #495057; font-weight: normal;">→ Cantidad: ${cod.cantidad}</span></span>`;
+                    });
+                    codigosHTML += '</div>';
+                }
+
+                // Generar HTML de posiciones
+                let posicionesHTML = '';
+                if (p.posiciones && p.posiciones.length > 0) {
+                    posicionesHTML = '<div style="margin: 6px 0; display: flex; flex-wrap: wrap; gap: 4px;">';
+                    p.posiciones.forEach(pos => {
+                        posicionesHTML += `<span style="background: #e9ecef; padding: 2px 6px; border-radius: 4px; font-size: 10px; color: #495057;"><strong>${pos.abreviatura}</strong>: ${pos.cantidad}</span>`;
+                    });
+                    posicionesHTML += '</div>';
+                }
+
                 htmlPiezas += `
                     <div style="background:#f8f9fa; border:1px solid #e9ecef; border-radius:8px; padding:12px; display:flex; gap:12px; align-items:flex-start; position:relative;">
                         ${imgTag}
@@ -1932,6 +2028,9 @@ function openRackDetail(rackId) {
                             <h5 style="margin:0 0 5px 0; font-size:14px; color:#1a1d20;">${p.nombre}</h5>
                             <p style="margin:0; font-size:11px; color:#495057;"><strong>Client:</strong> ${p.cliente || 'N/A'}</p>
                             <p style="margin:0; font-size:11px; color:#495057;"><strong>Project:</strong> ${p.proyecto || 'N/A'}</p>
+                            <p style="margin:0; font-size:11px; color:#495057;"><strong>Year:</strong> ${p.year || 'N/A'}</p>
+                            ${codigosHTML}
+                            ${posicionesHTML}
                             <button style="margin-top:6px; background:none; border:none; color:#e30613; font-size:11px; font-weight:bold; padding:0; cursor:pointer; text-decoration:underline;" onclick='viewFullFixtureDetail(${fixtureJSON})'>View more / Details</button>
                             ${btnAcciones}
                         </div>
@@ -1956,6 +2055,167 @@ function openRackDetail(rackId) {
     openModal('modal-rack-detalle');
 }
 
+function autoFillRackAbbreviation() {
+    const clientName = document.getElementById('rack-pieza-cliente').value;
+    const client = listaClientesFirebase.find(c => c.nombre === clientName);
+    const abrevField = document.getElementById('rack-pieza-abrev');
+    if (abrevField) {
+        abrevField.value = client && client.abreviatura ? client.abreviatura : '';
+    }
+    updateRackInternalCodes();
+}
+
+function updateRackInternalCodes() {
+    const p1 = document.getElementById('rack-proj-part1').value.trim();
+    const p2 = document.getElementById('rack-proj-part2').value.trim();
+    const year = document.getElementById('rack-pieza-year').value.trim();
+    const abrev = document.getElementById('rack-pieza-abrev').value.trim();
+
+    const contenedorCodigos = document.getElementById('contenedor-codigos-rack');
+    if (!contenedorCodigos) return;
+
+    // Obtener posiciones actuales (TODAS, incluso con cantidad 0, para detectar duplicados)
+    const contenedor = document.getElementById('contenedor-posiciones-rack');
+    const posiciones = [];
+    const abreviaturasVistas = {};
+    let hayDuplicados = false;
+
+    if (contenedor) {
+        Array.from(contenedor.children).forEach(div => {
+            const inputAbrev = div.querySelector('.pos-abrev');
+            const inputCant = div.querySelector('.pos-cant');
+            if (!inputAbrev || !inputCant) return;
+
+            const a = (inputAbrev.value || '').trim().toUpperCase();
+            const c = parseInt(inputCant.value) || 0;
+
+            // Marcar visualmente el input duplicado
+            if (a) {
+                if (abreviaturasVistas[a]) {
+                    hayDuplicados = true;
+                    inputAbrev.style.borderColor = '#e30613';
+                    inputAbrev.style.backgroundColor = '#fff5f5';
+                } else {
+                    inputAbrev.style.borderColor = '#ced4da';
+                    inputAbrev.style.backgroundColor = '#f8f9fa';
+                    abreviaturasVistas[a] = true;
+                }
+            } else {
+                inputAbrev.style.borderColor = '#ced4da';
+                inputAbrev.style.backgroundColor = '#f8f9fa';
+            }
+
+            if (a) posiciones.push({ abreviatura: a, cantidad: c });
+        });
+    }
+
+    // Si hay duplicados, mostrar advertencia y no generar códigos
+    if (hayDuplicados) {
+        contenedorCodigos.innerHTML = '<input type="text" readonly value="⚠️ Duplicate position abbreviations detected. Each position must be unique." style="background-color: #fff3cd; color: #856404; font-family: monospace; letter-spacing: 1px; padding: 6px 10px; border: 1px solid #ffeeba; border-radius: 5px; font-size: 12px; width: 100%;">';
+        return;
+    }
+
+    if (p1 && p2 && year && abrev && posiciones.length > 0) {
+        let htmlCodigos = '';
+        let hayAlguno = false;
+        posiciones.forEach(pos => {
+            if (pos.cantidad > 0) {
+                hayAlguno = true;
+                const codigo = `${p1}.${p2}-${year}-${abrev}-${pos.abreviatura}`;
+                htmlCodigos += `<input type="text" readonly value="${codigo}  →  Cantidad: ${pos.cantidad}" style="background-color: #fff5f5; font-weight: bold; color: #e30613; font-family: monospace; letter-spacing: 1px; margin-bottom: 4px; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 5px; font-size: 12px;">`;
+            }
+        });
+        if (hayAlguno) {
+            contenedorCodigos.innerHTML = htmlCodigos;
+        } else {
+            contenedorCodigos.innerHTML = '<input type="text" readonly value="Add at least one position with quantity > 0" style="background-color: #fff5f5; color: #6c757d; font-family: monospace; letter-spacing: 1px; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 5px; font-size: 12px;">';
+        }
+    } else {
+        contenedorCodigos.innerHTML = '<input type="text" readonly value="Fill all fields (project, year, client) to generate codes" style="background-color: #fff5f5; color: #6c757d; font-family: monospace; letter-spacing: 1px; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 5px; font-size: 12px;">';
+    }
+}
+
+function agregarPosicionRack(abreviatura = '', cantidad = 0, id = null) {
+    contadorPosicionesRack++;
+    const posId = id || `pos_${contadorPosicionesRack}`;
+    const contenedor = document.getElementById('contenedor-posiciones-rack');
+    if (!contenedor) return;
+
+    const div = document.createElement('div');
+    div.id = posId;
+    div.style.cssText = "display: flex; gap: 8px; align-items: center; background: #ffffff; padding: 8px 10px; border-radius: 6px; border: 1px solid #dee2e6;";
+
+    div.innerHTML = `
+        <input type="text" class="pos-abrev" placeholder="Abrev. (ej: FL)" value="${abreviatura}" maxlength="5" style="width: 100px; padding: 6px 8px; border-radius: 4px; border: 1px solid #ced4da; background: #f8f9fa; font-size: 12px; text-transform: uppercase;" onkeyup="updateRackInternalCodes()" onchange="updateRackInternalCodes()">
+        <input type="number" class="pos-cant" placeholder="Cant." value="${cantidad}" min="0" style="width: 80px; padding: 6px 8px; border-radius: 4px; border: 1px solid #ced4da; background: #f8f9fa; font-size: 12px;" onkeyup="updateRackInternalCodes()" onchange="updateRackInternalCodes()">
+        <button type="button" onclick="eliminarPosicionRack('${posId}')" style="background: #fff5f5; border: 1px solid #ffc9c9; color: #e30613; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px;">&times;</button>
+    `;
+
+    contenedor.appendChild(div);
+    updateRackInternalCodes();
+}cargarPosicionesRack
+
+function eliminarPosicionRack(posId) {
+    const div = document.getElementById(posId);
+    if (div) {
+        div.remove();
+        updateRackInternalCodes();
+    }
+}
+
+function obtenerPosicionesRack() {
+    const contenedor = document.getElementById('contenedor-posiciones-rack');
+    if (!contenedor) return [];
+    
+    const posiciones = [];
+    const divs = contenedor.children;
+    
+    for (let i = 0; i < divs.length; i++) {
+        const div = divs[i];
+        const inputAbrev = div.querySelector('.pos-abrev');
+        const inputCant = div.querySelector('.pos-cant');
+        if (!inputAbrev || !inputCant) continue;
+        
+        const abrev = (inputAbrev.value || '').trim().toUpperCase();
+        const cant = parseInt(inputCant.value) || 0;
+        
+        if (abrev && cant > 0) {
+            posiciones.push({ abreviatura: abrev, cantidad: cant });
+        }
+    }
+    return posiciones;
+}
+
+function cargarPosicionesRack(posiciones) {
+    const contenedor = document.getElementById('contenedor-posiciones-rack');
+    if (!contenedor) return;
+    contenedor.innerHTML = '';
+    contadorPosicionesRack = 0;
+    
+    if (posiciones && posiciones.length > 0) {
+        posiciones.forEach((pos, idx) => {
+            contadorPosicionesRack++;
+            const posId = `pos_${contadorPosicionesRack}`;
+            const div = document.createElement('div');
+            div.id = posId;
+            div.style.cssText = "display: flex; gap: 8px; align-items: center; background: #ffffff; padding: 8px 10px; border-radius: 6px; border: 1px solid #dee2e6;";
+            div.innerHTML = `
+                <input type="text" class="pos-abrev" placeholder="Abrev. (ej: FL)" value="${pos.abreviatura || ''}" maxlength="5" style="width: 100px; padding: 6px 8px; border-radius: 4px; border: 1px solid #ced4da; background: #f8f9fa; font-size: 12px; text-transform: uppercase;" onkeyup="updateRackInternalCodes()" onchange="updateRackInternalCodes()">
+                <input type="number" class="pos-cant" placeholder="Cant." value="${pos.cantidad || 0}" min="0" style="width: 80px; padding: 6px 8px; border-radius: 4px; border: 1px solid #ced4da; background: #f8f9fa; font-size: 12px;" onkeyup="updateRackInternalCodes()" onchange="updateRackInternalCodes()">
+                <button type="button" onclick="eliminarPosicionRack('${posId}')" style="background: #fff5f5; border: 1px solid #ffc9c9; color: #e30613; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px;">&times;</button>
+            `;
+            contenedor.appendChild(div);
+        });
+    } else {
+        // Si no hay posiciones, agregar las 4 por defecto
+        agregarPosicionRack('FL', 0);
+        agregarPosicionRack('FR', 0);
+        agregarPosicionRack('RL', 0);
+        agregarPosicionRack('RR', 0);
+    }
+    updateRackInternalCodes();
+}
+
 function openAddRackPieceModal(rackId, nivelNum) {
     document.getElementById('rack-pieza-rack-id').value = rackId;
     document.getElementById('rack-pieza-nivel-id').value = nivelNum;
@@ -1963,6 +2223,8 @@ function openAddRackPieceModal(rackId, nivelNum) {
     document.getElementById('titulo-modal-pieza-rack').textContent = `Add Coupon (Level ${nivelNum})`;
     document.getElementById('rack-pieza-nombre').value = '';
     document.getElementById('rack-pieza-cliente').value = '';
+    document.getElementById('rack-pieza-abrev').value = '';
+    document.getElementById('rack-pieza-year').value = new Date().getFullYear();
     document.getElementById('rack-proj-part1').value = '';
     document.getElementById('rack-proj-part2').value = '';
     document.getElementById('rack-pieza-proyecto').value = '';
@@ -1970,6 +2232,9 @@ function openAddRackPieceModal(rackId, nivelNum) {
     document.getElementById('rack-pieza-foto-file').value = '';
     document.getElementById('rack-pieza-foto-base64').value = '';
     document.getElementById('rack-preview-foto-miniatura').style.display = 'none';
+
+    // Cargar posiciones por defecto
+    cargarPosicionesRack(null);
 
     poblarSelectClientes();
     closeModal('modal-rack-detalle');
@@ -1988,6 +2253,8 @@ function openEditRackPieceModal(rackId, nivelNum, index) {
     document.getElementById('titulo-modal-pieza-rack').textContent = `Edit Coupon: ${pieza.nombre}`;
     document.getElementById('rack-pieza-nombre').value = pieza.nombre || '';
     document.getElementById('rack-pieza-cliente').value = pieza.cliente || '';
+    document.getElementById('rack-pieza-abrev').value = pieza.abreviatura || '';
+    document.getElementById('rack-pieza-year').value = pieza.year || new Date().getFullYear();
 
     if (pieza.proyecto && pieza.proyecto.includes('.')) {
         const partes = pieza.proyecto.split('.');
@@ -2000,6 +2267,9 @@ function openEditRackPieceModal(rackId, nivelNum, index) {
 
     document.getElementById('rack-pieza-desc').value = pieza.desc || '';
     document.getElementById('rack-pieza-foto-base64').value = pieza.foto || '';
+
+    // Cargar posiciones existentes (si las hay) o las 4 por defecto
+    cargarPosicionesRack(pieza.posiciones || null);
 
     if (pieza.foto) {
         document.getElementById('rack-img-pieza-miniatura-prev').src = pieza.foto;
@@ -2037,10 +2307,90 @@ async function saveRackPiece(event) {
     const part2 = document.getElementById('rack-proj-part2').value.trim();
     const proyectoCompleto = (part1 && part2) ? `${part1}.${part2}` : '';
 
+    const year = parseInt(document.getElementById('rack-pieza-year').value) || null;
+    const abrev = document.getElementById('rack-pieza-abrev').value.trim().toUpperCase();
+
+    // Obtener TODAS las posiciones (incluso las de cantidad 0)
+    const contenedor = document.getElementById('contenedor-posiciones-rack');
+    const todasLasPosiciones = [];
+    if (contenedor) {
+        Array.from(contenedor.children).forEach(div => {
+            const inputAbrev = div.querySelector('.pos-abrev');
+            const inputCant = div.querySelector('.pos-cant');
+            if (inputAbrev && inputCant) {
+                const a = (inputAbrev.value || '').trim().toUpperCase();
+                const c = parseInt(inputCant.value) || 0;
+                if (a) todasLasPosiciones.push({ abreviatura: a, cantidad: c });
+            }
+        });
+    }
+
+    // Validar: al menos una posición con cantidad > 0
+    const totalCantidad = todasLasPosiciones.reduce((sum, pos) => sum + (parseInt(pos.cantidad) || 0), 0);
+    if (totalCantidad <= 0) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Missing quantities',
+            text: 'Please fill at least one position with a quantity greater than 0.',
+            confirmButtonColor: '#e30613'
+        });
+        return;
+    }
+    
+    // Validar: no debe haber abreviaturas de posición duplicadas
+    const abrevsVistas = {};
+    const duplicadas = [];
+    todasLasPosiciones.forEach(pos => {
+        if (abrevsVistas[pos.abreviatura]) {
+            if (!duplicadas.includes(pos.abreviatura)) duplicadas.push(pos.abreviatura);
+        } else {
+            abrevsVistas[pos.abreviatura] = true;
+        }
+    });
+    if (duplicadas.length > 0) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Duplicate position abbreviations',
+            html: `The following position abbreviation(s) are duplicated:<br><strong style="color:#e30613;">${duplicadas.join(', ')}</strong><br><br>Each position must have a unique abbreviation.`,
+            confirmButtonColor: '#e30613'
+        });
+        return;
+    }
+    
+
+    // Validar que haya proyecto, year y abrev para generar códigos
+    if (!proyectoCompleto || !year || !abrev) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Missing data',
+            text: 'Please fill Project Number, Year and Client Abbreviation to generate the internal codes.',
+            confirmButtonColor: '#e30613'
+        });
+        return;
+    }
+
+    // Generar códigos internos (uno por cada posición con cantidad > 0)
+    const codigosInternos = [];
+    todasLasPosiciones.forEach(pos => {
+        if (pos.cantidad > 0) {
+            codigosInternos.push({
+                codigo: `${proyectoCompleto}-${year}-${abrev}-${pos.abreviatura}`,
+                cantidad: pos.cantidad,
+                posicion: pos.abreviatura
+            });
+        }
+    });
+
+    console.log("🔢 Códigos generados:", codigosInternos); // ← Debug
+
     const piezaData = {
         nombre: document.getElementById('rack-pieza-nombre').value.trim(),
         cliente: document.getElementById('rack-pieza-cliente').value,
+        abreviatura: abrev,
+        year: year,
         proyecto: proyectoCompleto,
+        posiciones: todasLasPosiciones.filter(p => parseInt(p.cantidad) > 0),
+        codigosInternos: codigosInternos,
         desc: document.getElementById('rack-pieza-desc').value.trim(),
         foto: document.getElementById('rack-pieza-foto-base64').value || ''
     };
@@ -2056,9 +2406,9 @@ async function saveRackPiece(event) {
     await registrarModificacion(
         'RACK',
         index === "" ? 'CREAR' : 'EDITAR',
-        index === "" 
-            ? `Coupon "${piezaData.nombre}" added to rack ${rackId} (Level ${nivelNum})`
-            : `Coupon "${piezaData.nombre}" edited in rack ${rackId} (Level ${nivelNum})`,
+        index === ""
+            ? `Coupon "${piezaData.nombre}" added to rack ${rackId} (Level ${nivelNum}) - Codes: ${codigosInternos.map(c => c.codigo).join(', ')}`
+            : `Coupon "${piezaData.nombre}" edited in rack ${rackId} (Level ${nivelNum}) - Codes: ${codigosInternos.map(c => c.codigo).join(', ')}`,
         piezaAnterior, piezaData, 'racks', key
     );
 
@@ -2099,7 +2449,7 @@ function searchRacks(event) {
             const key = `${rack.id}-${d}`;
             const piezas = inventarioRacks[key] || [];
             piezas.forEach(p => {
-                const textoCompleto = `${p.nombre} ${p.cliente} ${p.proyecto} ${p.desc}`.toLowerCase();
+                const textoCompleto = `${p.nombre} ${p.cliente} ${p.proyecto} ${p.desc} ${(p.codigosInternos || []).map(c => c.codigo).join(' ')}`.toLowerCase();
                 if (textoCompleto.includes(termino)) {
                     resultados.push({ rackNombre: rack.nombre, rackId: rack.id, nivel: d, ...p });
                 }
@@ -2116,10 +2466,12 @@ function searchRacks(event) {
         resultados.forEach(r => {
             const item = document.createElement('div');
             item.style.cssText = "display:flex; justify-content:space-between; align-items:center; padding:12px; background:#f8f9fa; border:1px solid #dee2e6; border-radius:8px; margin-bottom:10px;";
+            const codigosHTML = (r.codigosInternos || []).map(c => `<span style="font-family: monospace; font-size: 11px; color: #e30613; font-weight: bold;">${c.codigo} (${c.cantidad})</span>`).join('<br>');
             item.innerHTML = `
                 <div>
                     <h5 style="margin:0 0 4px 0; color:#e30613; font-size:14px;">${r.nombre}</h5>
                     <p style="margin:0; font-size:12px; color:#495057;"><strong>Client:</strong> ${r.cliente || 'N/A'} | <strong>Project:</strong> ${r.proyecto || 'N/A'}</p>
+                    ${codigosHTML ? `<div style="margin-top:4px;">${codigosHTML}</div>` : ''}
                 </div>
                 <div style="background:#1a1d20; color:#ffffff; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:bold; white-space:nowrap;">${r.rackNombre} - Level ${r.nivel}</div>
             `;
@@ -2307,21 +2659,21 @@ async function saveMaterial(event) {
     const desc = document.getElementById('nacho-mat-desc').value.trim();
     const ubicacion = document.getElementById('nacho-mat-ubicacion').value.trim();
     const cant = parseInt(document.getElementById('nacho-mat-cant').value) || 0;
-    
-    const docRef = await db.collection("catalogo_nacho").add({ 
-        nombre, desc, ubicacion, cant 
+
+    const docRef = await db.collection("catalogo_nacho").add({
+        nombre, desc, ubicacion, cant
     });
-    
+
     await registrarModificacion(
-        'MATERIAL', 
-        'CREAR', 
-        `Material "${nombre}" added to Tooling catalog (Location: ${ubicacion})`, 
-        null, 
-        { nombre, desc, ubicacion, cant }, 
-        'catalogo_nacho', 
+        'MATERIAL',
+        'CREAR',
+        `Material "${nombre}" added to Tooling catalog (Location: ${ubicacion})`,
+        null,
+        { nombre, desc, ubicacion, cant },
+        'catalogo_nacho',
         docRef.id
     );
-    
+
     closeModal('modal-nuevo-material-nacho');
     document.getElementById('nacho-mat-nombre').value = '';
     document.getElementById('nacho-mat-desc').value = '';
@@ -2348,22 +2700,22 @@ async function saveQuantityModal(event) {
     const mat = listaNacho[indiceEdicionMaterial];
     const cantAnterior = mat.cant;
     const ubicacionAnterior = mat.ubicacion || '';
-    
-    await db.collection("catalogo_nacho").doc(mat.firestoreId).update({ 
-        cant: nuevaCant, 
-        ubicacion: nuevaUbicacion 
+
+    await db.collection("catalogo_nacho").doc(mat.firestoreId).update({
+        cant: nuevaCant,
+        ubicacion: nuevaUbicacion
     });
-    
+
     await registrarModificacion(
-        'MATERIAL', 
-        'EDITAR', 
-        `Stock of "${mat.nombre}" adjusted: ${cantAnterior} → ${nuevaCant} pcs${nuevaUbicacion !== ubicacionAnterior ? ` | Location: ${ubicacionAnterior || 'N/A'} → ${nuevaUbicacion || 'N/A'}` : ''}`, 
-        { cant: cantAnterior, ubicacion: ubicacionAnterior }, 
-        { cant: nuevaCant, ubicacion: nuevaUbicacion }, 
-        'catalogo_nacho', 
+        'MATERIAL',
+        'EDITAR',
+        `Stock of "${mat.nombre}" adjusted: ${cantAnterior} → ${nuevaCant} pcs${nuevaUbicacion !== ubicacionAnterior ? ` | Location: ${ubicacionAnterior || 'N/A'} → ${nuevaUbicacion || 'N/A'}` : ''}`,
+        { cant: cantAnterior, ubicacion: ubicacionAnterior },
+        { cant: nuevaCant, ubicacion: nuevaUbicacion },
+        'catalogo_nacho',
         mat.firestoreId
     );
-    
+
     closeModal('modal-editar-cantidad-nacho');
     Toast.fire({ icon: 'success', title: 'Material updated' });
 }
@@ -2694,19 +3046,19 @@ async function revertModification(historyId) {
             registro.refDocId
         );
 
-        Swal.fire({ 
-            icon: 'success', 
-            title: 'Modification Reverted', 
-            text: 'Data has been restored successfully.', 
-            confirmButtonColor: '#e30613' 
+        Swal.fire({
+            icon: 'success',
+            title: 'Modification Reverted',
+            text: 'Data has been restored successfully.',
+            confirmButtonColor: '#e30613'
         });
     } catch (error) {
         console.error("Revert error:", error);
-        Swal.fire({ 
-            icon: 'error', 
-            title: 'Could not revert', 
-            text: error.message || 'An error occurred while trying to revert.', 
-            confirmButtonColor: '#e30613' 
+        Swal.fire({
+            icon: 'error',
+            title: 'Could not revert',
+            text: error.message || 'An error occurred while trying to revert.',
+            confirmButtonColor: '#e30613'
         });
     }
 }
@@ -2763,21 +3115,21 @@ function openNewGlobalFixtureFromLocker(piezaData, lockerId, divNum) {
     contextoFixtureGlobalDesdeLocker = { lockerId, divNum };
     const locker = listaEstructuraLockers.find(l => l.id === lockerId);
     const lockerNombre = locker ? locker.nombre : lockerId;
-    
+
     document.getElementById('titulo-modal-fixture-global').textContent = `Add to Global List (from ${lockerNombre})`;
     document.getElementById('fg-nombre').value = piezaData.nombre || '';
     document.getElementById('fg-cliente').value = piezaData.cliente || '';
     document.getElementById('fg-ubicacion').value = piezaData.localidad || '';
-    
+
     if (piezaData.proyecto && piezaData.proyecto.includes('.')) {
         const partes = piezaData.proyecto.split('.');
         document.getElementById('fg-proj-part1').value = partes[0] || '';
         document.getElementById('fg-proj-part2').value = partes[1] || '';
     }
-    
+
     document.getElementById('fg-desc').value = piezaData.desc || '';
     document.getElementById('fg-foto-base64').value = piezaData.foto || '';
-    
+
     if (piezaData.foto) {
         document.getElementById('fg-img-preview').src = piezaData.foto;
         document.getElementById('fg-preview-foto').style.display = 'block';
@@ -2799,7 +3151,7 @@ function openEditGlobalFixtureModal(firestoreId) {
     document.getElementById('fg-pais').value = fx.pais || '';
     document.getElementById('fg-planta').value = fx.planta || '';
     document.getElementById('fg-ubicacion').value = fx.ubicacion || '';
-    
+
     if (fx.proyecto && fx.proyecto.includes('.')) {
         const partes = fx.proyecto.split('.');
         document.getElementById('fg-proj-part1').value = partes[0] || '';
@@ -2808,20 +3160,20 @@ function openEditGlobalFixtureModal(firestoreId) {
         document.getElementById('fg-proj-part1').value = '';
         document.getElementById('fg-proj-part2').value = '';
     }
-    
+
     document.getElementById('fg-estado').value = fx.estado || 'Available';
     document.getElementById('fg-desc').value = fx.desc || '';
     document.getElementById('fg-contacto-nombre').value = fx.contactoNombre || '';
     document.getElementById('fg-contacto-info').value = fx.contactoInfo || '';
     document.getElementById('fg-foto-base64').value = fx.foto || '';
-    
+
     if (fx.foto) {
         document.getElementById('fg-img-preview').src = fx.foto;
         document.getElementById('fg-preview-foto').style.display = 'block';
     } else {
         document.getElementById('fg-preview-foto').style.display = 'none';
     }
-    
+
     contextoFixtureGlobalDesdeLocker = null;
     openModal('modal-fixture-global');
 }
@@ -2878,7 +3230,7 @@ async function saveGlobalFixture(event) {
     await registrarModificacion(
         'FIXTURE_GLOBAL',
         idExistente ? 'EDITAR' : 'CREAR',
-        idExistente 
+        idExistente
             ? `Global fixture "${datosFixture.nombre}" edited (${datosFixture.cliente})`
             : `Fixture "${datosFixture.nombre}" added to Global List (${datosFixture.cliente} - ${datosFixture.pais})`,
         fxAnterior, datosFixture, 'lista_fixtures_global', docId
@@ -2984,14 +3336,15 @@ function renderizarListaFixturesGlobal() {
             'Out of service': '#6c757d'
         };
 
-        grupos[cliente].forEach(fx => {
+        grupos[cliente].forEach((fx, fxIndex) => {
             const card = document.createElement('div');
             const colorEstado = coloresEstado[fx.estado] || '#6c757d';
-            
+            const cardId = `fx-card-${cliente.replace(/\s+/g, '_')}-${fxIndex}`;
+
             card.style.cssText = "background: #ffffff; border: 1px solid #e9ecef; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.04); transition: all 0.2s;";
 
-            const imgHTML = fx.foto 
-                ? `<img src="${fx.foto}" style="width: 100%; height: 140px; object-fit: cover; border-radius: 8px; cursor: pointer; margin-bottom: 8px;" onclick="enlargePhoto('${fx.foto}')" title="Click to enlarge">` 
+            const imgHTML = fx.foto
+                ? `<img src="${fx.foto}" style="width: 100%; height: 140px; object-fit: cover; border-radius: 8px; cursor: pointer; margin-bottom: 8px;" onclick="enlargePhoto('${fx.foto}')" title="Click to enlarge">`
                 : `<div style="width: 100%; height: 100px; background: #f1f3f5; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #adb5bd; font-size: 32px; margin-bottom: 8px;">📷</div>`;
 
             const adminBotones = esAdmin ? `
@@ -3002,15 +3355,23 @@ function renderizarListaFixturesGlobal() {
             ` : '';
 
             const origenHTML = fx.origen ? `<p style="margin: 0; font-size: 11px; color: #adb5bd;"><strong>Huf Origin:</strong> ${fx.origen}</p>` : '';
-            const contactoHTML = fx.contactoNombre || fx.contactoInfo 
+            const contactoHTML = fx.contactoNombre || fx.contactoInfo
                 ? `<div style="background: #e7f5ff; border-left: 3px solid #1971c2; padding: 8px 10px; border-radius: 6px; margin-top: 4px;">
                     <p style="margin: 0; font-size: 11px; color: #1971c2; font-weight: bold;">📞 Plant contact</p>
                     ${fx.contactoNombre ? `<p style="margin: 2px 0 0 0; font-size: 12px; color: #212529;">${fx.contactoNombre}</p>` : ''}
                     ${fx.contactoInfo ? `<p style="margin: 0; font-size: 11px; color: #495057;">${fx.contactoInfo}</p>` : ''}
-                   </div>` 
+                   </div>`
                 : '';
 
-            const descHTML = fx.desc ? `<p style="margin: 4px 0 0 0; font-size: 12px; color: #495057; line-height: 1.4;">${fx.desc}</p>` : '';
+            // Descripción con truncado
+            const descTexto = fx.desc || '';
+            const esLarga = descTexto.length > 150; // Si es larga, agregar botón
+            const descHTML = descTexto
+                ? `<div>
+                    <p id="desc-${cardId}" class="desc-fixture-card">${descTexto}</p>
+                    ${esLarga ? `<button class="btn-toggle-desc" onclick="toggleDescripcion('${cardId}', this)">Ver más ▾</button>` : ''}
+                   </div>`
+                : '';
 
             card.innerHTML = `
                 ${imgHTML}
@@ -3035,4 +3396,22 @@ function renderizarListaFixturesGlobal() {
         bloqueCliente.appendChild(gridFixtures);
         contenedor.appendChild(bloqueCliente);
     });
+}
+
+function toggleDescripcion(cardId, btn) {
+    const desc = document.getElementById(`desc-${cardId}`);
+    if (!desc) return;
+
+    const expandida = desc.classList.toggle('expandida');
+
+    if (expandida) {
+        btn.textContent = 'Ver menos ▴';
+    } else {
+        btn.textContent = 'Ver más ▾';
+        // Opcional: hacer scroll suave hacia la tarjeta para no perderla
+        const card = btn.closest('div[style*="background: #ffffff"]');
+        if (card) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
 }
