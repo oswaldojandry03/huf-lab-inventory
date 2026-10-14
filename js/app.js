@@ -90,6 +90,17 @@ const Toast = Swal.mixin({
 });
 
 // =============================================================
+// ESTADOS DISPONIBLES
+// =============================================================
+const ESTADOS_DISPONIBLES = {
+    'Available': { color: '#2b8a3e', emoji: '🟢', label: 'Available' },
+    'In use': { color: '#f59f00', emoji: '🟠', label: 'In use' },
+    'Under repair': { color: '#856404', emoji: '🟡', label: 'Under repair' },
+    'In transit': { color: '#862e9c', emoji: '🟣', label: 'In transit' },
+    'Out of service': { color: '#6c757d', emoji: '⚫', label: 'Out of service' }
+};
+
+// =============================================================
 // LOCAL DATA STRUCTURES
 // =============================================================
 let inventarioGabinetes = {};
@@ -123,9 +134,12 @@ let indiceEliminarMaterial = null;
 let temporizadorLimpiezaBusqueda = null;
 let terminoBusquedaFixtureGlobal = '';
 let contextoFixtureGlobalDesdeLocker = null;
+let contextoFixtureGlobalDesdeCoupon = null;
 
-// Variables para posiciones dinámicas de rack
+let registrandoUsuario = false;
+
 let contadorPosicionesRack = 0;
+let contadorPosicionesCouponGlobal = 0;
 
 function reiniciarTemporizadorInactividadBusqueda() {
     if (temporizadorLimpiezaBusqueda) clearTimeout(temporizadorLimpiezaBusqueda);
@@ -134,6 +148,48 @@ function reiniciarTemporizadorInactividadBusqueda() {
             el.classList.remove('resaltado');
         });
     }, 60000);
+}
+
+// =============================================================
+// COMPRESIÓN DE IMÁGENES
+// =============================================================
+function comprimirImagen(file, maxWidth = 600, maxHeight = 600, calidad = 0.55) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                let { width, height } = img;
+                
+                if (width > height) {
+                    if (width > maxWidth) {
+                        height = Math.round((height * maxWidth) / width);
+                        width = maxWidth;
+                    }
+                } else {
+                    if (height > maxHeight) {
+                        width = Math.round((width * maxHeight) / height);
+                        height = maxHeight;
+                    }
+                }
+                
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                const base64Comprimido = canvas.toDataURL('image/jpeg', calidad);
+                const pesoKB = (base64Comprimido.length / 1024).toFixed(2);
+                console.log(`📸 Imagen comprimida: ${width}x${height} → ${pesoKB} KB`);
+                resolve(base64Comprimido);
+            };
+            img.onerror = reject;
+            img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
 }
 
 // =============================================================
@@ -281,29 +337,55 @@ function escucharFirestore() {
 // FIREBASE AUTH STATE LISTENER
 // =============================================================
 auth.onAuthStateChanged(async (user) => {
+    if (registrandoUsuario) {
+        console.log("⏸️ onAuthStateChanged bloqueado (registro en proceso)");
+        return;
+    }
+
     if (user) {
         usuarioUID = user.uid;
-        let intentos = 0;
-        const maxIntentos = 20;
-        const intervalo = setInterval(() => {
-            intentos++;
-            const perfil = listaUsuariosFirebase[user.uid];
-            if (perfil) {
-                usuarioActual = perfil.username || user.email;
-                rolActual = perfil.role || 'USER';
-                aplicarInterfazSesionIniciada();
-                clearInterval(intervalo);
-            } else if (intentos >= maxIntentos) {
-                clearInterval(intervalo);
-                console.warn("No profile found for UID:", user.uid);
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'Profile not found',
-                    text: 'Your account exists but no profile was found. Contact a Master.',
-                    confirmButtonColor: '#e30613'
-                });
+        console.log("⏱️ Auth detectado para UID:", user.uid);
+        
+        let perfil = null;
+        
+        for (let i = 0; i < 30; i++) {
+            if (listaUsuariosFirebase[user.uid]) {
+                perfil = listaUsuariosFirebase[user.uid];
+                console.log(`✅ Perfil encontrado en cache local (intento ${i+1})`);
+                break;
             }
-        }, 200);
+            
+            try {
+                const docSnap = await db.collection("usuarios").doc(user.uid).get();
+                if (docSnap.exists) {
+                    perfil = docSnap.data();
+                    listaUsuariosFirebase[user.uid] = perfil;
+                    console.log(`✅ Perfil encontrado en Firestore (intento ${i+1})`);
+                    break;
+                }
+            } catch (e) {
+                console.warn(`⚠️ Error en intento ${i+1}:`, e);
+            }
+            
+            await new Promise(resolve => setTimeout(resolve, 200));
+        }
+        
+        if (perfil) {
+            usuarioActual = perfil.username || user.email;
+            rolActual = perfil.role || 'USER';
+            console.log("✅ Aplicando interfaz para:", usuarioActual, "(", rolActual, ")");
+            aplicarInterfazSesionIniciada();
+        } else {
+            console.warn("❌ No profile found for UID:", user.uid);
+            Swal.fire({
+                icon: 'warning',
+                title: 'Profile not found',
+                text: 'Your account exists but no profile was found. Contact a Master.',
+                confirmButtonColor: '#e30613'
+            });
+            await auth.signOut();
+        }
+        
     } else {
         usuarioActual = null;
         usuarioUID = null;
@@ -411,7 +493,7 @@ function openModal(id) { document.getElementById(id).style.display = 'block'; }
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
 // =============================================================
-// LOGIN / LOGOUT / REGISTRATION (NOW WITH FIREBASE AUTH)
+// LOGIN / LOGOUT / REGISTRATION
 // =============================================================
 async function login(event) {
     event.preventDefault();
@@ -483,6 +565,9 @@ async function login(event) {
 
 async function registerNewUser(event) {
     event.preventDefault();
+    
+    registrandoUsuario = true;
+    
     const email = document.getElementById('reg-email').value.trim();
     const username = document.getElementById('reg-username').value.trim();
     const location = document.getElementById('reg-location').value.trim();
@@ -493,12 +578,14 @@ async function registerNewUser(event) {
     if (p1 !== p2) {
         err.textContent = "Passwords do not match.";
         err.style.display = 'block';
+        registrandoUsuario = false;
         return;
     }
 
     if (p1.length < 6) {
         err.textContent = "Password must be at least 6 characters.";
         err.style.display = 'block';
+        registrandoUsuario = false;
         return;
     }
 
@@ -507,6 +594,7 @@ async function registerNewUser(event) {
         if (u.username && u.username.toLowerCase() === username.toLowerCase()) {
             err.textContent = "That username is already taken.";
             err.style.display = 'block';
+            registrandoUsuario = false;
             return;
         }
     }
@@ -549,6 +637,11 @@ async function registerNewUser(event) {
         document.getElementById('reg-password').value = '';
         document.getElementById('reg-password2').value = '';
 
+        setTimeout(() => {
+            registrandoUsuario = false;
+            console.log("🔓 Flag de registro liberado");
+        }, 1500);
+
         Swal.fire({
             icon: 'success',
             title: 'Registration Sent!',
@@ -557,6 +650,8 @@ async function registerNewUser(event) {
         });
     } catch (error) {
         console.error("Registration error:", error);
+        registrandoUsuario = false;
+        
         if (error.code === 'auth/email-already-in-use') {
             err.textContent = "That email is already registered.";
         } else if (error.code === 'auth/invalid-email') {
@@ -821,6 +916,17 @@ function poblarSelectClientes() {
             selectRack.appendChild(option);
         });
     }
+
+    const selectCouponGlobal = document.getElementById('cg-cliente');
+    if (selectCouponGlobal) {
+        selectCouponGlobal.innerHTML = '<option value="">-- Select a client --</option>';
+        listaClientesFirebase.forEach((c) => {
+            const option = document.createElement('option');
+            option.value = c.nombre;
+            option.textContent = c.nombre + (c.abreviatura ? ` (${c.abreviatura})` : '');
+            selectCouponGlobal.appendChild(option);
+        });
+    }
 }
 
 function renderizarTablaClientes() {
@@ -877,7 +983,6 @@ async function saveNewClient(event) {
 
     if (!nombreVal) return;
 
-    // Check for duplicate name
     for (const c of listaClientesFirebase) {
         if (c.nombre.toLowerCase() === nombreVal.toLowerCase()) {
             Swal.fire({
@@ -890,7 +995,6 @@ async function saveNewClient(event) {
         }
     }
 
-    // Check for duplicate abbreviation
     if (abrevVal) {
         for (const c of listaClientesFirebase) {
             if (c.abreviatura && c.abreviatura.toLowerCase() === abrevVal.toLowerCase()) {
@@ -949,7 +1053,6 @@ async function editClientName(id, nombreActual, abrevActual) {
     });
 
     if (formValues && formValues.nombre) {
-        // Check for duplicate abbreviation (excluding current client)
         if (formValues.abrev) {
             for (const c of listaClientesFirebase) {
                 if (c.id !== id && c.abreviatura && c.abreviatura.toLowerCase() === formValues.abrev.toLowerCase()) {
@@ -1213,8 +1316,8 @@ function crearBotonCajon(gabId, num) {
 }
 
 function openDrawerEdit(gabId, num) {
-    if (!usuarioActual || (rolActual !== "SUPER_ADMIN" && rolActual !== "ADMIN")) {
-        Swal.fire({ icon: 'error', title: 'Insufficient permissions', text: 'Only administrators can edit components.', confirmButtonColor: '#e30613' });
+    if (!usuarioActual || (rolActual !== "SUPER_ADMIN" && rolActual !== "ADMIN" && rolActual !== "USER")) {
+        Swal.fire({ icon: 'error', title: 'Insufficient permissions', text: 'You must be logged in to edit components.', confirmButtonColor: '#e30613' });
         return;
     }
     const key = `${gabId}-${num}`;
@@ -1334,7 +1437,7 @@ async function saveCabinetStructure(event) {
         datosGabinete.colIzqFilas = parseInt(document.getElementById('custom-col-izq-filas').value) || 3;
         datosGabinete.colCentroCols = parseInt(document.getElementById('custom-col-centro-cols').value) || 4;
         datosGabinete.colCentroFilas = parseInt(document.getElementById('custom-col-centro-filas').value) || 5;
-        datosGabinetecolDerFilas = parseInt(document.getElementById('custom-col-der-filas').value) || 3;
+        datosGabinete.colDerFilas = parseInt(document.getElementById('custom-col-der-filas').value) || 3;
     } else {
         datosGabinete.cant = parseInt(document.getElementById('gabinete-cant-input').value) || 30;
     }
@@ -1573,9 +1676,25 @@ function openLockerDetail(lockerId) {
     const locker = listaEstructuraLockers.find(l => l.id === lockerId);
     if (!locker) return;
 
-    document.getElementById('titulo-modal-locker-detalle').textContent = `${locker.nombre} - Compartments & Pieces`;
+    const tituloEl = document.getElementById('titulo-modal-locker-detalle');
+    tituloEl.textContent = `${locker.nombre} - Compartments & Pieces`;
+    tituloEl.dataset.id = lockerId;
+    
     const cont = document.getElementById('contenido-estantes-locker');
     cont.innerHTML = '';
+    const esAdmin = rolActual === "SUPER_ADMIN" || rolActual === "ADMIN";
+
+    const btnRename = document.getElementById('btn-renombrar-niveles-locker');
+    if (btnRename) {
+        btnRename.style.display = esAdmin ? 'inline-block' : 'none';
+    }
+
+    generarContenidoLockerDetail(locker, cont);
+    openModal('modal-locker-detalle');
+}
+
+function generarContenidoLockerDetail(locker, cont) {
+    const lockerId = locker.id;
     const esAdmin = rolActual === "SUPER_ADMIN" || rolActual === "ADMIN";
 
     for (let d = 1; d <= locker.niveles; d++) {
@@ -1598,11 +1717,14 @@ function openLockerDetail(lockerId) {
                 ` : '';
 
                 const fixtureJSON = JSON.stringify(p).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
+                const estadoInfo = ESTADOS_DISPONIBLES[p.estado] || ESTADOS_DISPONIBLES['Available'];
+                const estadoBadge = `<button onclick="openEstadoSelector('locker', '${lockerId}', ${d}, ${idx}, event)" style="background: ${estadoInfo.color}; color: white; border: none; padding: 2px 10px; border-radius: 12px; font-size: 10px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; margin-bottom: 6px;">${estadoInfo.emoji} ${estadoInfo.label} ▾</button>`;
 
                 htmlPiezas += `
                     <div style="background:#f8f9fa; border:1px solid #e9ecef; border-radius:8px; padding:12px; display:flex; gap:12px; align-items:flex-start; position:relative;">
                         ${imgTag}
                         <div style="flex:1;">
+                            ${estadoBadge}
                             <h5 style="margin:0 0 5px 0; font-size:14px; color:#1a1d20;">${p.nombre}</h5>
                             <p style="margin:0; font-size:11px; color:#495057;"><strong>Client:</strong> ${p.cliente || 'N/A'}</p>
                             <p style="margin:0; font-size:11px; color:#495057;"><strong>Location:</strong> ${p.localidad || 'N/A'}</p>
@@ -1616,10 +1738,11 @@ function openLockerDetail(lockerId) {
         }
 
         const btnAgregar = usuarioActual ? `<button class="btn-huf-secundario" style="font-size: 11px; padding: 4px 8px;" onclick="openAddPieceModal('${lockerId}', ${d})">+ Add Fixture</button>` : '';
+        const nombreNivel = (locker.nombresNiveles && locker.nombresNiveles[d]) ? locker.nombresNiveles[d] : `Compartment ${d}`;
 
         bloque.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #f1f3f5; padding-bottom:8px; margin-bottom:12px;">
-                <h4 style="margin:0; font-size:14px; color:#343a40;">Compartment ${d}</h4>
+                <h4 style="margin:0; font-size:14px; color:#343a40;">${nombreNivel}</h4>
                 ${btnAgregar}
             </div>
             <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:12px;">
@@ -1628,7 +1751,6 @@ function openLockerDetail(lockerId) {
         `;
         cont.appendChild(bloque);
     }
-    openModal('modal-locker-detalle');
 }
 
 function viewFullFixtureDetail(fixture) {
@@ -1636,7 +1758,6 @@ function viewFullFixtureDetail(fixture) {
         ? `<img src="${fixture.foto}" style="max-width: 100%; max-height: 250px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #dee2e6;">`
         : '<p style="color: #6c757d; font-style: italic; margin-bottom: 15px;">No photo attached</p>';
 
-    // Sección de códigos internos (solo si existen)
     let codigosHTML = '';
     if (fixture.codigosInternos && fixture.codigosInternos.length > 0) {
         codigosHTML = `
@@ -1655,7 +1776,6 @@ function viewFullFixtureDetail(fixture) {
         codigosHTML += `</div>`;
     }
 
-    // Sección de posiciones (solo si existen)
     let posicionesHTML = '';
     if (fixture.posiciones && fixture.posiciones.length > 0) {
         posicionesHTML = `
@@ -1668,11 +1788,16 @@ function viewFullFixtureDetail(fixture) {
         posicionesHTML += `</div>`;
     }
 
+    // Estado info
+    const estadoInfo = ESTADOS_DISPONIBLES[fixture.estado] || ESTADOS_DISPONIBLES['Available'];
+    const estadoHTML = `<p><strong>Status:</strong> <span style="background: ${estadoInfo.color}; color: white; padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: bold;">${estadoInfo.emoji} ${estadoInfo.label}</span></p>`;
+
     Swal.fire({
         title: fixture.nombre,
         html: `
             <div style="text-align: left; font-size: 14px;">
                 <div style="text-align: center;">${imagenHTML}</div>
+                ${estadoHTML}
                 <p><strong>Client:</strong> ${fixture.cliente || 'N/A'}</p>
                 <p><strong>Location:</strong> ${fixture.localidad || 'N/A'}</p>
                 <p><strong>Project:</strong> ${fixture.proyecto || 'N/A'}</p>
@@ -1759,17 +1884,31 @@ function autotab(actual, siguienteId) {
     if (actual.value.length >= actual.maxLength) document.getElementById(siguienteId).focus();
 }
 
-function convertImageToBase64(input) {
+async function convertImageToBase64(input) {
     const file = input.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const base64String = e.target.result;
-            document.getElementById('input-pieza-foto-base64').value = base64String;
-            document.getElementById('img-pieza-miniatura-prev').src = base64String;
-            document.getElementById('preview-foto-miniatura').style.display = 'block';
-        };
-        reader.readAsDataURL(file);
+    if (!file) return;
+    
+    if (file.size > 10 * 1024 * 1024) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Image too large',
+            text: 'Please select an image smaller than 10 MB.',
+            confirmButtonColor: '#e30613'
+        });
+        input.value = '';
+        return;
+    }
+    
+    try {
+        Toast.fire({ icon: 'info', title: 'Compressing image...' });
+        const base64Comprimido = await comprimirImagen(file, 600, 600, 0.55);
+        document.getElementById('input-pieza-foto-base64').value = base64Comprimido;
+        document.getElementById('img-pieza-miniatura-prev').src = base64Comprimido;
+        document.getElementById('preview-foto-miniatura').style.display = 'block';
+        Toast.fire({ icon: 'success', title: 'Image ready' });
+    } catch (error) {
+        console.error("Error compressing image:", error);
+        Swal.fire({ icon: 'error', title: 'Error', text: 'Could not process the image.' });
     }
 }
 
@@ -1784,13 +1923,17 @@ async function saveLockerPiece(event) {
     const part2 = document.getElementById('proj-part2').value.trim();
     const proyectoCompleto = `${part1}.${part2}`;
 
+    const esNuevo = (index === "");
+    const estadoActual = esNuevo ? 'Available' : (inventarioLockers[key][parseInt(index)]?.estado || 'Available');
+
     const piezaData = {
         nombre: document.getElementById('input-pieza-nombre').value.trim(),
         cliente: document.getElementById('input-pieza-cliente').value,
         localidad: document.getElementById('input-pieza-localidad').value.trim(),
         proyecto: proyectoCompleto,
         desc: document.getElementById('input-pieza-desc').value.trim(),
-        foto: document.getElementById('input-pieza-foto-base64').value || ''
+        foto: document.getElementById('input-pieza-foto-base64').value || '',
+        estado: estadoActual
     };
 
     if (!inventarioLockers[key]) inventarioLockers[key] = [];
@@ -1851,7 +1994,217 @@ function enlargePhoto(src) {
 }
 
 // =============================================================
-// 2.B RACKS & COUPONS (CON POSICIONES DINÁMICAS)
+// SELECTOR DE ESTADO (para fixtures y coupons)
+// =============================================================
+async function openEstadoSelector(tipo, contenedorId, nivelIdx, piezaIdx, event) {
+    if (event) event.stopPropagation();
+    
+    const key = `${contenedorId}-${nivelIdx}`;
+    const lista = tipo === 'locker' ? inventarioLockers[key] : inventarioRacks[key];
+    if (!lista || !lista[piezaIdx]) return;
+    
+    const pieza = lista[piezaIdx];
+    const estadoActual = pieza.estado || 'Available';
+    
+    const opciones = {};
+    for (const keyE in ESTADOS_DISPONIBLES) {
+        opciones[keyE] = `${ESTADOS_DISPONIBLES[keyE].emoji} ${ESTADOS_DISPONIBLES[keyE].label}`;
+    }
+    
+    const { value: nuevoEstado } = await Swal.fire({
+        title: 'Change Status',
+        input: 'select',
+        inputOptions: opciones,
+        inputValue: estadoActual,
+        showCancelButton: true,
+        confirmButtonText: 'Save',
+        cancelButtonText: 'Cancel',
+        confirmButtonColor: '#e30613'
+    });
+    
+    if (!nuevoEstado || nuevoEstado === estadoActual) return;
+    
+    const estadoAnterior = pieza.estado || 'Available';
+    pieza.estado = nuevoEstado;
+    
+    try {
+        const coleccion = tipo === 'locker' ? 'lockers' : 'racks';
+        await db.collection(coleccion).doc(key).set({ items: lista });
+        
+        // Actualizar en lista global si existe
+        await syncEstadoConGlobal(tipo, pieza);
+        
+        await registrarModificacion(
+            tipo.toUpperCase(),
+            'EDITAR',
+            `Status of "${pieza.nombre}" changed from ${estadoAnterior} to ${nuevoEstado}`,
+            { estado: estadoAnterior },
+            { estado: nuevoEstado },
+            coleccion,
+            key
+        );
+        
+        Toast.fire({ icon: 'success', title: `Status updated to ${nuevoEstado}` });
+        
+        // Recargar la vista
+        if (tipo === 'locker') openLockerDetail(contenedorId);
+        else openRackDetail(contenedorId);
+        
+    } catch (error) {
+        console.error(error);
+        pieza.estado = estadoAnterior;
+        Swal.fire({ icon: 'error', title: 'Error', text: 'Could not update status.' });
+    }
+}
+
+async function syncEstadoConGlobal(tipo, pieza) {
+    // Buscar en la lista global por nombre + cliente + código interno
+    const codigoInterno = pieza.codigoInterno || (pieza.codigosInternos && pieza.codigosInternos[0]?.codigo) || '';
+    
+    const globalItem = listaFixturesGlobales.find(f => 
+        f.nombre === pieza.nombre && 
+        f.cliente === pieza.cliente &&
+        (codigoInterno === '' || f.codigoInterno === codigoInterno)
+    );
+    
+    if (globalItem) {
+        try {
+            await db.collection("lista_fixtures_global").doc(globalItem.firestoreId).update({
+                estado: pieza.estado
+            });
+            console.log(`🔄 Estado sincronizado con lista global: ${pieza.nombre}`);
+        } catch (e) {
+            console.warn("No se pudo sincronizar estado con la lista global:", e);
+        }
+    }
+}
+
+// =============================================================
+// RENAME LEVELS
+// =============================================================
+function openRenameLevelsModal(tipo) {
+    if (rolActual !== "SUPER_ADMIN" && rolActual !== "ADMIN") {
+        Swal.fire({ icon: 'error', title: 'Access denied', text: 'Only administrators can rename levels.', confirmButtonColor: '#e30613' });
+        return;
+    }
+    
+    // Leer el ID desde el data-attribute del título
+    const tituloEl = tipo === 'locker'
+        ? document.getElementById('titulo-modal-locker-detalle')
+        : document.getElementById('titulo-modal-rack-detalle');
+    
+    const id = tituloEl ? tituloEl.dataset.id : null;
+    
+    if (!id) {
+        Swal.fire({ icon: 'error', title: 'Error', text: 'Could not identify the item.', confirmButtonColor: '#e30613' });
+        return;
+    }
+    
+    const item = tipo === 'locker' 
+        ? listaEstructuraLockers.find(l => l.id === id)
+        : listaEstructuraRacks.find(r => r.id === id);
+    
+    if (!item) {
+        Swal.fire({ icon: 'error', title: 'Error', text: 'Item not found.', confirmButtonColor: '#e30613' });
+        return;
+    }
+    
+    document.getElementById('rename-tipo').value = tipo;
+    document.getElementById('rename-id').value = id;
+    document.getElementById('titulo-modal-renombrar-niveles').textContent = `Rename ${tipo === 'locker' ? 'Compartments' : 'Levels'} - ${item.nombre}`;
+    
+    const container = document.getElementById('rename-inputs-container');
+    container.innerHTML = '';
+    
+    const nombresActuales = item.nombresNiveles || {};
+    const defaultLabel = tipo === 'locker' ? 'Compartment' : 'Level';
+    
+    for (let i = 1; i <= item.niveles; i++) {
+        const row = document.createElement('div');
+        row.style.cssText = "display: flex; align-items: center; gap: 10px;";
+        row.innerHTML = `
+            <span style="font-size: 12px; color: #6c757d; min-width: 110px; font-weight: 600;">${defaultLabel} ${i}:</span>
+            <input type="text" data-nivel="${i}" placeholder="${defaultLabel} ${i} (default)" value="${nombresActuales[i] || ''}" maxlength="40" style="flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid #ced4da; background: #f8f9fa; font-size: 13px;">
+        `;
+        container.appendChild(row);
+    }
+    
+    // 🔑 CLAVE: Como el modal está DENTRO del modal de detalle, no podemos usar openModal simple
+    // Verificamos si está abierto el modal de detalle y NO cerramos nada
+    const modal = document.getElementById('modal-renombrar-niveles');
+    modal.style.display = 'block';
+    modal.style.zIndex = '10001';
+    
+    // 🚫 NO cerramos el modal de detalle, así el usuario puede cancelar y volver
+    // Solo elevamos el z-index del modal Rename para que aparezca al frente
+}
+
+async function saveRenameLevels(event) {
+    event.preventDefault();
+    const tipo = document.getElementById('rename-tipo').value;
+    const id = document.getElementById('rename-id').value;
+    const container = document.getElementById('rename-inputs-container');
+    
+    const nombresNiveles = {};
+    container.querySelectorAll('input[data-nivel]').forEach(inp => {
+        const nivel = parseInt(inp.dataset.nivel);
+        const valor = (inp.value || '').trim();
+        if (valor) nombresNiveles[nivel] = valor;
+    });
+    
+    const coleccion = tipo === 'locker' ? 'config_lockers' : 'config_racks';
+    const itemAnterior = tipo === 'locker' 
+        ? listaEstructuraLockers.find(l => l.id === id)
+        : listaEstructuraRacks.find(r => r.id === id);
+    
+    try {
+        await db.collection(coleccion).doc(id).update({ nombresNiveles });
+        
+        await registrarModificacion(
+            tipo.toUpperCase(),
+            'EDITAR',
+            `Levels of "${itemAnterior?.nombre || id}" renamed`,
+            { nombresNiveles: itemAnterior?.nombresNiveles || {} },
+            { nombresNiveles },
+            coleccion,
+            id
+        );
+        
+        // 🔑 CLAVE: Actualizar el item local inmediatamente para no esperar el listener
+        if (itemAnterior) {
+            itemAnterior.nombresNiveles = nombresNiveles;
+        }
+        
+        closeModal('modal-renombrar-niveles');
+        Toast.fire({ icon: 'success', title: 'Level names saved' });
+        
+        // Recargar la vista del detalle (sin cerrar y reabrir)
+        if (tipo === 'locker') {
+            // Regenerar el contenido del modal de detalle SIN cerrar el Rename
+            const cont = document.getElementById('contenido-estantes-locker');
+            if (cont) {
+                cont.innerHTML = '';
+                // Regenerar solo el contenido
+                const locker = listaEstructuraLockers.find(l => l.id === id);
+                if (locker) generarContenidoLockerDetail(locker, cont);
+            }
+        } else {
+            const cont = document.getElementById('contenido-niveles-rack');
+            if (cont) {
+                cont.innerHTML = '';
+                const rack = listaEstructuraRacks.find(r => r.id === id);
+                if (rack) generarContenidoRackDetail(rack, cont);
+            }
+        }
+        
+    } catch (error) {
+        console.error(error);
+        Swal.fire({ icon: 'error', title: 'Error', text: 'Could not save level names.' });
+    }
+}
+
+// =============================================================
+// 2.B RACKS & COUPONS
 // =============================================================
 function generarTarjetasRacks() {
     const contenedor = document.getElementById('contenedor-racks');
@@ -1975,9 +2328,25 @@ function openRackDetail(rackId) {
     const rack = listaEstructuraRacks.find(r => r.id === rackId);
     if (!rack) return;
 
-    document.getElementById('titulo-modal-rack-detalle').textContent = `${rack.nombre} - Levels & Coupons`;
+    const tituloEl = document.getElementById('titulo-modal-rack-detalle');
+    tituloEl.textContent = `${rack.nombre} - Levels & Coupons`;
+    tituloEl.dataset.id = rackId;
+    
     const cont = document.getElementById('contenido-niveles-rack');
     cont.innerHTML = '';
+    const esAdmin = rolActual === "SUPER_ADMIN" || rolActual === "ADMIN";
+
+    const btnRename = document.getElementById('btn-renombrar-niveles-rack');
+    if (btnRename) {
+        btnRename.style.display = esAdmin ? 'inline-block' : 'none';
+    }
+
+    generarContenidoRackDetail(rack, cont);
+    openModal('modal-rack-detalle');
+}
+
+function generarContenidoRackDetail(rack, cont) {
+    const rackId = rack.id;
     const esAdmin = rolActual === "SUPER_ADMIN" || rolActual === "ADMIN";
 
     for (let d = 1; d <= rack.niveles; d++) {
@@ -2000,8 +2369,9 @@ function openRackDetail(rackId) {
                 ` : '';
 
                 const fixtureJSON = JSON.stringify(p).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
+                const estadoInfo = ESTADOS_DISPONIBLES[p.estado] || ESTADOS_DISPONIBLES['Available'];
+                const estadoBadge = `<button onclick="openEstadoSelector('rack', '${rackId}', ${d}, ${idx}, event)" style="background: ${estadoInfo.color}; color: white; border: none; padding: 2px 10px; border-radius: 12px; font-size: 10px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; margin-bottom: 6px;">${estadoInfo.emoji} ${estadoInfo.label} ▾</button>`;
 
-                // Generar HTML de códigos (uno por posición con cantidad > 0)
                 let codigosHTML = '';
                 if (p.codigosInternos && p.codigosInternos.length > 0) {
                     codigosHTML = '<div style="margin: 6px 0; display: flex; flex-direction: column; gap: 3px;">';
@@ -2011,7 +2381,6 @@ function openRackDetail(rackId) {
                     codigosHTML += '</div>';
                 }
 
-                // Generar HTML de posiciones
                 let posicionesHTML = '';
                 if (p.posiciones && p.posiciones.length > 0) {
                     posicionesHTML = '<div style="margin: 6px 0; display: flex; flex-wrap: wrap; gap: 4px;">';
@@ -2025,6 +2394,7 @@ function openRackDetail(rackId) {
                     <div style="background:#f8f9fa; border:1px solid #e9ecef; border-radius:8px; padding:12px; display:flex; gap:12px; align-items:flex-start; position:relative;">
                         ${imgTag}
                         <div style="flex:1;">
+                            ${estadoBadge}
                             <h5 style="margin:0 0 5px 0; font-size:14px; color:#1a1d20;">${p.nombre}</h5>
                             <p style="margin:0; font-size:11px; color:#495057;"><strong>Client:</strong> ${p.cliente || 'N/A'}</p>
                             <p style="margin:0; font-size:11px; color:#495057;"><strong>Project:</strong> ${p.proyecto || 'N/A'}</p>
@@ -2040,10 +2410,11 @@ function openRackDetail(rackId) {
         }
 
         const btnAgregar = usuarioActual ? `<button class="btn-huf-secundario" style="font-size: 11px; padding: 4px 8px;" onclick="openAddRackPieceModal('${rackId}', ${d})">+ Add Coupon</button>` : '';
+        const nombreNivel = (rack.nombresNiveles && rack.nombresNiveles[d]) ? rack.nombresNiveles[d] : `Level ${d}`;
 
         bloque.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #f1f3f5; padding-bottom:8px; margin-bottom:12px;">
-                <h4 style="margin:0; font-size:14px; color:#343a40;">Level ${d}</h4>
+                <h4 style="margin:0; font-size:14px; color:#343a40;">${nombreNivel}</h4>
                 ${btnAgregar}
             </div>
             <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:12px;">
@@ -2052,7 +2423,6 @@ function openRackDetail(rackId) {
         `;
         cont.appendChild(bloque);
     }
-    openModal('modal-rack-detalle');
 }
 
 function autoFillRackAbbreviation() {
@@ -2074,7 +2444,6 @@ function updateRackInternalCodes() {
     const contenedorCodigos = document.getElementById('contenedor-codigos-rack');
     if (!contenedorCodigos) return;
 
-    // Obtener posiciones actuales (TODAS, incluso con cantidad 0, para detectar duplicados)
     const contenedor = document.getElementById('contenedor-posiciones-rack');
     const posiciones = [];
     const abreviaturasVistas = {};
@@ -2089,7 +2458,6 @@ function updateRackInternalCodes() {
             const a = (inputAbrev.value || '').trim().toUpperCase();
             const c = parseInt(inputCant.value) || 0;
 
-            // Marcar visualmente el input duplicado
             if (a) {
                 if (abreviaturasVistas[a]) {
                     hayDuplicados = true;
@@ -2109,7 +2477,6 @@ function updateRackInternalCodes() {
         });
     }
 
-    // Si hay duplicados, mostrar advertencia y no generar códigos
     if (hayDuplicados) {
         contenedorCodigos.innerHTML = '<input type="text" readonly value="⚠️ Duplicate position abbreviations detected. Each position must be unique." style="background-color: #fff3cd; color: #856404; font-family: monospace; letter-spacing: 1px; padding: 6px 10px; border: 1px solid #ffeeba; border-radius: 5px; font-size: 12px; width: 100%;">';
         return;
@@ -2153,7 +2520,7 @@ function agregarPosicionRack(abreviatura = '', cantidad = 0, id = null) {
 
     contenedor.appendChild(div);
     updateRackInternalCodes();
-}cargarPosicionesRack
+}
 
 function eliminarPosicionRack(posId) {
     const div = document.getElementById(posId);
@@ -2161,29 +2528,6 @@ function eliminarPosicionRack(posId) {
         div.remove();
         updateRackInternalCodes();
     }
-}
-
-function obtenerPosicionesRack() {
-    const contenedor = document.getElementById('contenedor-posiciones-rack');
-    if (!contenedor) return [];
-    
-    const posiciones = [];
-    const divs = contenedor.children;
-    
-    for (let i = 0; i < divs.length; i++) {
-        const div = divs[i];
-        const inputAbrev = div.querySelector('.pos-abrev');
-        const inputCant = div.querySelector('.pos-cant');
-        if (!inputAbrev || !inputCant) continue;
-        
-        const abrev = (inputAbrev.value || '').trim().toUpperCase();
-        const cant = parseInt(inputCant.value) || 0;
-        
-        if (abrev && cant > 0) {
-            posiciones.push({ abreviatura: abrev, cantidad: cant });
-        }
-    }
-    return posiciones;
 }
 
 function cargarPosicionesRack(posiciones) {
@@ -2207,7 +2551,6 @@ function cargarPosicionesRack(posiciones) {
             contenedor.appendChild(div);
         });
     } else {
-        // Si no hay posiciones, agregar las 4 por defecto
         agregarPosicionRack('FL', 0);
         agregarPosicionRack('FR', 0);
         agregarPosicionRack('RL', 0);
@@ -2232,8 +2575,9 @@ function openAddRackPieceModal(rackId, nivelNum) {
     document.getElementById('rack-pieza-foto-file').value = '';
     document.getElementById('rack-pieza-foto-base64').value = '';
     document.getElementById('rack-preview-foto-miniatura').style.display = 'none';
+    const checkCouponGlobal = document.getElementById('check-agregar-coupon-global');
+    if (checkCouponGlobal) checkCouponGlobal.checked = false;
 
-    // Cargar posiciones por defecto
     cargarPosicionesRack(null);
 
     poblarSelectClientes();
@@ -2268,7 +2612,6 @@ function openEditRackPieceModal(rackId, nivelNum, index) {
     document.getElementById('rack-pieza-desc').value = pieza.desc || '';
     document.getElementById('rack-pieza-foto-base64').value = pieza.foto || '';
 
-    // Cargar posiciones existentes (si las hay) o las 4 por defecto
     cargarPosicionesRack(pieza.posiciones || null);
 
     if (pieza.foto) {
@@ -2278,21 +2621,38 @@ function openEditRackPieceModal(rackId, nivelNum, index) {
         document.getElementById('rack-preview-foto-miniatura').style.display = 'none';
     }
 
+    const checkCouponGlobal = document.getElementById('check-agregar-coupon-global');
+    if (checkCouponGlobal) checkCouponGlobal.checked = false;
+
     closeModal('modal-rack-detalle');
     openModal('modal-editar-pieza-rack');
 }
 
-function convertRackImageToBase64(input) {
+async function convertRackImageToBase64(input) {
     const file = input.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const base64String = e.target.result;
-            document.getElementById('rack-pieza-foto-base64').value = base64String;
-            document.getElementById('rack-img-pieza-miniatura-prev').src = base64String;
-            document.getElementById('rack-preview-foto-miniatura').style.display = 'block';
-        };
-        reader.readAsDataURL(file);
+    if (!file) return;
+    
+    if (file.size > 10 * 1024 * 1024) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Image too large',
+            text: 'Please select an image smaller than 10 MB.',
+            confirmButtonColor: '#e30613'
+        });
+        input.value = '';
+        return;
+    }
+    
+    try {
+        Toast.fire({ icon: 'info', title: 'Compressing image...' });
+        const base64Comprimido = await comprimirImagen(file, 600, 600, 0.55);
+        document.getElementById('rack-pieza-foto-base64').value = base64Comprimido;
+        document.getElementById('rack-img-pieza-miniatura-prev').src = base64Comprimido;
+        document.getElementById('rack-preview-foto-miniatura').style.display = 'block';
+        Toast.fire({ icon: 'success', title: 'Image ready' });
+    } catch (error) {
+        console.error("Error compressing image:", error);
+        Swal.fire({ icon: 'error', title: 'Error', text: 'Could not process the image.' });
     }
 }
 
@@ -2310,7 +2670,6 @@ async function saveRackPiece(event) {
     const year = parseInt(document.getElementById('rack-pieza-year').value) || null;
     const abrev = document.getElementById('rack-pieza-abrev').value.trim().toUpperCase();
 
-    // Obtener TODAS las posiciones (incluso las de cantidad 0)
     const contenedor = document.getElementById('contenedor-posiciones-rack');
     const todasLasPosiciones = [];
     if (contenedor) {
@@ -2325,7 +2684,6 @@ async function saveRackPiece(event) {
         });
     }
 
-    // Validar: al menos una posición con cantidad > 0
     const totalCantidad = todasLasPosiciones.reduce((sum, pos) => sum + (parseInt(pos.cantidad) || 0), 0);
     if (totalCantidad <= 0) {
         Swal.fire({
@@ -2337,7 +2695,6 @@ async function saveRackPiece(event) {
         return;
     }
     
-    // Validar: no debe haber abreviaturas de posición duplicadas
     const abrevsVistas = {};
     const duplicadas = [];
     todasLasPosiciones.forEach(pos => {
@@ -2356,9 +2713,7 @@ async function saveRackPiece(event) {
         });
         return;
     }
-    
 
-    // Validar que haya proyecto, year y abrev para generar códigos
     if (!proyectoCompleto || !year || !abrev) {
         Swal.fire({
             icon: 'error',
@@ -2369,7 +2724,6 @@ async function saveRackPiece(event) {
         return;
     }
 
-    // Generar códigos internos (uno por cada posición con cantidad > 0)
     const codigosInternos = [];
     todasLasPosiciones.forEach(pos => {
         if (pos.cantidad > 0) {
@@ -2381,7 +2735,8 @@ async function saveRackPiece(event) {
         }
     });
 
-    console.log("🔢 Códigos generados:", codigosInternos); // ← Debug
+    const esNuevo = (index === "");
+    const estadoActual = esNuevo ? 'Available' : (inventarioRacks[key][parseInt(index)]?.estado || 'Available');
 
     const piezaData = {
         nombre: document.getElementById('rack-pieza-nombre').value.trim(),
@@ -2391,8 +2746,10 @@ async function saveRackPiece(event) {
         proyecto: proyectoCompleto,
         posiciones: todasLasPosiciones.filter(p => parseInt(p.cantidad) > 0),
         codigosInternos: codigosInternos,
+        codigoInterno: codigosInternos[0]?.codigo || '',
         desc: document.getElementById('rack-pieza-desc').value.trim(),
-        foto: document.getElementById('rack-pieza-foto-base64').value || ''
+        foto: document.getElementById('rack-pieza-foto-base64').value || '',
+        estado: estadoActual
     };
 
     if (!inventarioRacks[key]) inventarioRacks[key] = [];
@@ -2412,9 +2769,18 @@ async function saveRackPiece(event) {
         piezaAnterior, piezaData, 'racks', key
     );
 
+    const checkCouponGlobal = document.getElementById('check-agregar-coupon-global');
+    const quiereAgregarGlobal = checkCouponGlobal && checkCouponGlobal.checked;
+
     closeModal('modal-editar-pieza-rack');
     Toast.fire({ icon: 'success', title: 'Coupon saved successfully' });
     openRackDetail(rackId);
+
+    if (quiereAgregarGlobal) {
+        setTimeout(() => {
+            openNewGlobalFixtureFromCoupon(piezaData, rackId, nivelNum);
+        }, 400);
+    }
 }
 
 async function deleteRackPiece(rackId, nivelNum, index) {
@@ -3106,7 +3472,16 @@ function openNewGlobalFixtureModal() {
     document.getElementById('fg-foto-file').value = '';
     document.getElementById('fg-foto-base64').value = '';
     document.getElementById('fg-preview-foto').style.display = 'none';
+    
+    // Ocultar sección de coupon
+    const seccionCoupon = document.getElementById('fg-seccion-coupon');
+    if (seccionCoupon) seccionCoupon.style.display = 'none';
+    document.getElementById('fg-codigo-interno').value = '';
+    document.getElementById('fg-coupon-year').value = '';
+    document.getElementById('fg-coupon-posiciones').innerHTML = '';
+    
     contextoFixtureGlobalDesdeLocker = null;
+    contextoFixtureGlobalDesdeCoupon = null;
     openModal('modal-fixture-global');
 }
 
@@ -3133,6 +3508,57 @@ function openNewGlobalFixtureFromLocker(piezaData, lockerId, divNum) {
     if (piezaData.foto) {
         document.getElementById('fg-img-preview').src = piezaData.foto;
         document.getElementById('fg-preview-foto').style.display = 'block';
+    }
+}
+
+function openNewGlobalFixtureFromCoupon(piezaData, rackId, nivelNum) {
+    openNewGlobalFixtureModal();
+    contextoFixtureGlobalDesdeCoupon = { rackId, nivelNum };
+    const rack = listaEstructuraRacks.find(r => r.id === rackId);
+    const rackNombre = rack ? rack.nombre : rackId;
+
+    document.getElementById('titulo-modal-fixture-global').textContent = `Add Coupon to Global List (from ${rackNombre})`;
+    
+    // Prellenar datos básicos del coupon
+    document.getElementById('fg-nombre').value = piezaData.nombre || '';
+    document.getElementById('fg-cliente').value = piezaData.cliente || '';
+    document.getElementById('fg-ubicacion').value = `${rackNombre} - Level ${nivelNum}`;
+
+    if (piezaData.proyecto && piezaData.proyecto.includes('.')) {
+        const partes = piezaData.proyecto.split('.');
+        document.getElementById('fg-proj-part1').value = partes[0] || '';
+        document.getElementById('fg-proj-part2').value = partes[1] || '';
+    }
+
+    document.getElementById('fg-desc').value = piezaData.desc || '';
+    document.getElementById('fg-foto-base64').value = piezaData.foto || '';
+
+    if (piezaData.foto) {
+        document.getElementById('fg-img-preview').src = piezaData.foto;
+        document.getElementById('fg-preview-foto').style.display = 'block';
+    }
+
+    // Mostrar y llenar la sección de coupon
+    const seccionCoupon = document.getElementById('fg-seccion-coupon');
+    if (seccionCoupon) {
+        seccionCoupon.style.display = 'block';
+        
+        document.getElementById('fg-codigo-interno').value = piezaData.codigoInterno || '';
+        document.getElementById('fg-coupon-year').value = piezaData.year || '';
+        
+        const posicionesContainer = document.getElementById('fg-coupon-posiciones');
+        posicionesContainer.innerHTML = '';
+        
+        if (piezaData.posiciones && piezaData.posiciones.length > 0) {
+            piezaData.posiciones.forEach(pos => {
+                const badge = document.createElement('span');
+                badge.style.cssText = "background: #862e9c; color: white; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: bold;";
+                badge.textContent = `${pos.abreviatura}: ${pos.cantidad}`;
+                posicionesContainer.appendChild(badge);
+            });
+        } else {
+            posicionesContainer.innerHTML = '<span style="color: #6c757d; font-size: 12px;">No positions registered.</span>';
+        }
     }
 }
 
@@ -3174,21 +3600,58 @@ function openEditGlobalFixtureModal(firestoreId) {
         document.getElementById('fg-preview-foto').style.display = 'none';
     }
 
+    // Manejar sección de coupon si existe
+    const seccionCoupon = document.getElementById('fg-seccion-coupon');
+    if (fx.codigoInterno && seccionCoupon) {
+        seccionCoupon.style.display = 'block';
+        document.getElementById('fg-codigo-interno').value = fx.codigoInterno || '';
+        document.getElementById('fg-coupon-year').value = fx.year || '';
+        
+        const posicionesContainer = document.getElementById('fg-coupon-posiciones');
+        posicionesContainer.innerHTML = '';
+        
+        if (fx.posiciones && fx.posiciones.length > 0) {
+            fx.posiciones.forEach(pos => {
+                const badge = document.createElement('span');
+                badge.style.cssText = "background: #862e9c; color: white; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: bold;";
+                badge.textContent = `${pos.abreviatura}: ${pos.cantidad}`;
+                posicionesContainer.appendChild(badge);
+            });
+        }
+    } else if (seccionCoupon) {
+        seccionCoupon.style.display = 'none';
+    }
+
     contextoFixtureGlobalDesdeLocker = null;
+    contextoFixtureGlobalDesdeCoupon = null;
     openModal('modal-fixture-global');
 }
 
-function convertGlobalFixtureImage(input) {
+async function convertGlobalFixtureImage(input) {
     const file = input.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const base64String = e.target.result;
-            document.getElementById('fg-foto-base64').value = base64String;
-            document.getElementById('fg-img-preview').src = base64String;
-            document.getElementById('fg-preview-foto').style.display = 'block';
-        };
-        reader.readAsDataURL(file);
+    if (!file) return;
+    
+    if (file.size > 10 * 1024 * 1024) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Image too large',
+            text: 'Please select an image smaller than 10 MB.',
+            confirmButtonColor: '#e30613'
+        });
+        input.value = '';
+        return;
+    }
+    
+    try {
+        Toast.fire({ icon: 'info', title: 'Compressing image...' });
+        const base64Comprimido = await comprimirImagen(file, 800, 800, 0.6);
+        document.getElementById('fg-foto-base64').value = base64Comprimido;
+        document.getElementById('fg-img-preview').src = base64Comprimido;
+        document.getElementById('fg-preview-foto').style.display = 'block';
+        Toast.fire({ icon: 'success', title: 'Image ready' });
+    } catch (error) {
+        console.error("Error compressing image:", error);
+        Swal.fire({ icon: 'error', title: 'Error', text: 'Could not process the image.' });
     }
 }
 
@@ -3217,6 +3680,28 @@ async function saveGlobalFixture(event) {
         actualizadoPor: usuarioActual || 'Anonymous'
     };
 
+    // Si viene de un coupon, agregar datos del coupon
+    if (contextoFixtureGlobalDesdeCoupon) {
+        const rack = listaEstructuraRacks.find(r => r.id === contextoFixtureGlobalDesdeCoupon.rackId);
+        const rackNombre = rack ? rack.nombre : contextoFixtureGlobalDesdeCoupon.rackId;
+        datosFixture.origen = `${rackNombre} - Level ${contextoFixtureGlobalDesdeCoupon.nivelNum}`;
+        datosFixture.codigoInterno = document.getElementById('fg-codigo-interno').value;
+        datosFixture.year = parseInt(document.getElementById('fg-coupon-year').value) || null;
+        datosFixture.esCoupon = true;
+        
+        // Extraer posiciones del HTML mostrado
+        const posicionesContainer = document.getElementById('fg-coupon-posiciones');
+        const posiciones = [];
+        posicionesContainer.querySelectorAll('span').forEach(span => {
+            const texto = span.textContent; // "FL: 3"
+            const match = texto.match(/^(.+?):\s*(\d+)$/);
+            if (match) {
+                posiciones.push({ abreviatura: match[1].trim(), cantidad: parseInt(match[2]) });
+            }
+        });
+        datosFixture.posiciones = posiciones;
+    }
+
     if (contextoFixtureGlobalDesdeLocker) {
         const locker = listaEstructuraLockers.find(l => l.id === contextoFixtureGlobalDesdeLocker.lockerId);
         const lockerNombre = locker ? locker.nombre : contextoFixtureGlobalDesdeLocker.lockerId;
@@ -3238,6 +3723,7 @@ async function saveGlobalFixture(event) {
 
     closeModal('modal-fixture-global');
     contextoFixtureGlobalDesdeLocker = null;
+    contextoFixtureGlobalDesdeCoupon = null;
     Toast.fire({ icon: 'success', title: idExistente ? 'Global fixture updated' : 'Fixture added to global list' });
 }
 
@@ -3285,7 +3771,7 @@ function renderizarListaFixturesGlobal() {
     if (terminoBusquedaFixtureGlobal) {
         const t = terminoBusquedaFixtureGlobal;
         listaFiltrada = listaFixturesGlobales.filter(f => {
-            const textoCompleto = `${f.nombre} ${f.cliente} ${f.pais} ${f.planta} ${f.ubicacion} ${f.proyecto} ${f.desc} ${f.contactoNombre} ${f.contactoInfo}`.toLowerCase();
+            const textoCompleto = `${f.nombre} ${f.cliente} ${f.pais} ${f.planta} ${f.ubicacion} ${f.proyecto} ${f.desc} ${f.contactoNombre} ${f.contactoInfo} ${f.codigoInterno || ''}`.toLowerCase();
             return textoCompleto.includes(t);
         });
     }
@@ -3295,7 +3781,7 @@ function renderizarListaFixturesGlobal() {
             <div style="text-align: center; padding: 60px 20px;">
                 <div style="font-size: 60px; margin-bottom: 15px;">📭</div>
                 <p style="color: #6c757d; font-size: 16px;">${terminoBusquedaFixtureGlobal ? `No fixtures found for "${terminoBusquedaFixtureGlobal}".` : 'No fixtures registered in the global list yet.'}</p>
-                ${!terminoBusquedaFixtureGlobal ? '<p style="color: #adb5bd; font-size: 13px; margin-top: 8px;">Use the "+ Add Fixture to List" button or check the box when saving a fixture in a locker.</p>' : ''}
+                ${!terminoBusquedaFixtureGlobal ? '<p style="color: #adb5bd; font-size: 13px; margin-top: 8px;">Use the "+ Add Fixture to List" or "+ Add Coupon" button.</p>' : ''}
             </div>
         `;
         return;
@@ -3321,24 +3807,17 @@ function renderizarListaFixturesGlobal() {
         headerCliente.innerHTML = `
             <span style="font-size: 20px;">🏢</span>
             <h3 style="margin: 0; font-size: 17px; font-weight: 700;">${cliente}</h3>
-            <span style="background: rgba(255,255,255,0.25); padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: bold;">${grupos[cliente].length} fixture(s)</span>
+            <span style="background: rgba(255,255,255,0.25); padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: bold;">${grupos[cliente].length} item(s)</span>
         `;
         bloqueCliente.appendChild(headerCliente);
 
         const gridFixtures = document.createElement('div');
         gridFixtures.style.cssText = "display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 15px; padding: 18px; background: #f8f9fa; border-radius: 0 0 10px 10px; border: 1px solid #e9ecef; border-top: none;";
 
-        const coloresEstado = {
-            'Available': '#2b8a3e',
-            'In use': '#1971c2',
-            'Under repair': '#856404',
-            'In transit': '#862e9c',
-            'Out of service': '#6c757d'
-        };
-
         grupos[cliente].forEach((fx, fxIndex) => {
             const card = document.createElement('div');
-            const colorEstado = coloresEstado[fx.estado] || '#6c757d';
+            const estadoInfo = ESTADOS_DISPONIBLES[fx.estado] || ESTADOS_DISPONIBLES['Available'];
+            const colorEstado = estadoInfo.color;
             const cardId = `fx-card-${cliente.replace(/\s+/g, '_')}-${fxIndex}`;
 
             card.style.cssText = "background: #ffffff; border: 1px solid #e9ecef; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.04); transition: all 0.2s;";
@@ -3363,9 +3842,8 @@ function renderizarListaFixturesGlobal() {
                    </div>`
                 : '';
 
-            // Descripción con truncado
             const descTexto = fx.desc || '';
-            const esLarga = descTexto.length > 150; // Si es larga, agregar botón
+            const esLarga = descTexto.length > 150;
             const descHTML = descTexto
                 ? `<div>
                     <p id="desc-${cardId}" class="desc-fixture-card">${descTexto}</p>
@@ -3373,18 +3851,43 @@ function renderizarListaFixturesGlobal() {
                    </div>`
                 : '';
 
+            // Sección de códigos y coupons
+            let codigosHTML = '';
+            if (fx.codigoInterno || (fx.codigosInternos && fx.codigosInternos.length > 0)) {
+                const codigos = fx.codigosInternos || (fx.codigoInterno ? [{ codigo: fx.codigoInterno, cantidad: null }] : []);
+                codigosHTML = '<div style="margin-top: 8px;">';
+                codigos.forEach(cod => {
+                    codigosHTML += `<p style="margin: 2px 0; font-size: 11px; color: #862e9c; font-family: monospace; font-weight: bold; background: #f3e8ff; padding: 3px 8px; border-radius: 4px; display: inline-block;">🔢 ${cod.codigo}${cod.cantidad ? ` (x${cod.cantidad})` : ''}</p>`;
+                });
+                codigosHTML += '</div>';
+            }
+
+            let couponPosicionesHTML = '';
+            if (fx.esCoupon && fx.posiciones && fx.posiciones.length > 0) {
+                couponPosicionesHTML = `
+                    <div style="margin-top: 8px; background: #f3e8ff; border: 1px solid #d0bfff; border-radius: 6px; padding: 8px 10px;">
+                        <p style="margin: 0 0 6px 0; font-size: 11px; color: #862e9c; font-weight: bold;">🔢 Coupons</p>
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                            ${fx.posiciones.map(pos => `<span style="background: #862e9c; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">${pos.abreviatura}: ${pos.cantidad}</span>`).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
             card.innerHTML = `
                 ${imgHTML}
                 <div>
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px;">
                         <h4 style="margin: 0; font-size: 15px; color: #1a1d20; font-weight: 700;">${fx.nombre}</h4>
-                        <span style="background: ${colorEstado}; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: bold; white-space: nowrap;">${fx.estado || 'Available'}</span>
+                        <span style="background: ${colorEstado}; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: bold; white-space: nowrap;">${estadoInfo.emoji} ${estadoInfo.label}</span>
                     </div>
                     <p style="margin: 0; font-size: 12px; color: #495057;"><strong>🌍 Country:</strong> ${fx.pais || 'N/A'}</p>
                     <p style="margin: 2px 0 0 0; font-size: 12px; color: #495057;"><strong>🏭 Plant:</strong> ${fx.planta || 'N/A'}</p>
                     ${fx.ubicacion ? `<p style="margin: 2px 0 0 0; font-size: 12px; color: #495057;"><strong>📍 Location:</strong> ${fx.ubicacion}</p>` : ''}
                     ${fx.proyecto ? `<p style="margin: 2px 0 0 0; font-size: 12px; color: #495057;"><strong>🔢 Project:</strong> ${fx.proyecto}</p>` : ''}
                     ${origenHTML}
+                    ${codigosHTML}
+                    ${couponPosicionesHTML}
                     ${descHTML}
                 </div>
                 ${contactoHTML}
@@ -3408,10 +3911,207 @@ function toggleDescripcion(cardId, btn) {
         btn.textContent = 'Ver menos ▴';
     } else {
         btn.textContent = 'Ver más ▾';
-        // Opcional: hacer scroll suave hacia la tarjeta para no perderla
         const card = btn.closest('div[style*="background: #ffffff"]');
         if (card) {
             card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
     }
+}
+
+// =============================================================
+// 8. ADD COUPON FROM GLOBAL LIST
+// =============================================================
+function openNewCouponGlobalModal() {
+    document.getElementById('cg-nombre').value = '';
+    document.getElementById('cg-cliente').value = '';
+    document.getElementById('cg-abrev').value = '';
+    document.getElementById('cg-year').value = new Date().getFullYear();
+    document.getElementById('cg-proj-part1').value = '';
+    document.getElementById('cg-proj-part2').value = '';
+    document.getElementById('cg-pais').value = '';
+    document.getElementById('cg-planta').value = '';
+    document.getElementById('cg-ubicacion').value = '';
+    document.getElementById('cg-estado').value = 'Available';
+    document.getElementById('cg-desc').value = '';
+    document.getElementById('cg-contacto-nombre').value = '';
+    document.getElementById('cg-contacto-info').value = '';
+    
+    document.getElementById('cg-contenedor-posiciones').innerHTML = '';
+    contadorPosicionesCouponGlobal = 0;
+    agregarPosicionCouponGlobal('FL', 0);
+    agregarPosicionCouponGlobal('FR', 0);
+    agregarPosicionCouponGlobal('RL', 0);
+    agregarPosicionCouponGlobal('RR', 0);
+    
+    poblarSelectClientes();
+    openModal('modal-coupon-global');
+}
+
+function autoFillCouponGlobalAbbreviation() {
+    const clientName = document.getElementById('cg-cliente').value;
+    const client = listaClientesFirebase.find(c => c.nombre === clientName);
+    const abrevField = document.getElementById('cg-abrev');
+    if (abrevField) {
+        abrevField.value = client && client.abreviatura ? client.abreviatura : '';
+    }
+    updateCouponGlobalCodes();
+}
+
+function agregarPosicionCouponGlobal(abreviatura = '', cantidad = 0) {
+    contadorPosicionesCouponGlobal++;
+    const posId = `cg_pos_${contadorPosicionesCouponGlobal}`;
+    const contenedor = document.getElementById('cg-contenedor-posiciones');
+    if (!contenedor) return;
+
+    const div = document.createElement('div');
+    div.id = posId;
+    div.style.cssText = "display: flex; gap: 8px; align-items: center; background: #ffffff; padding: 8px 10px; border-radius: 6px; border: 1px solid #dee2e6;";
+
+    div.innerHTML = `
+        <input type="text" class="cg-pos-abrev" placeholder="Abrev. (ej: FL)" value="${abreviatura}" maxlength="5" style="width: 100px; padding: 6px 8px; border-radius: 4px; border: 1px solid #ced4da; background: #f8f9fa; font-size: 12px; text-transform: uppercase;" onkeyup="updateCouponGlobalCodes()" onchange="updateCouponGlobalCodes()">
+        <input type="number" class="cg-pos-cant" placeholder="Cant." value="${cantidad}" min="0" style="width: 80px; padding: 6px 8px; border-radius: 4px; border: 1px solid #ced4da; background: #f8f9fa; font-size: 12px;" onkeyup="updateCouponGlobalCodes()" onchange="updateCouponGlobalCodes()">
+        <button type="button" onclick="eliminarPosicionCouponGlobal('${posId}')" style="background: #fff5f5; border: 1px solid #ffc9c9; color: #e30613; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px;">&times;</button>
+    `;
+
+    contenedor.appendChild(div);
+    updateCouponGlobalCodes();
+}
+
+function eliminarPosicionCouponGlobal(posId) {
+    const div = document.getElementById(posId);
+    if (div) {
+        div.remove();
+        updateCouponGlobalCodes();
+    }
+}
+
+function updateCouponGlobalCodes() {
+    const p1 = document.getElementById('cg-proj-part1').value.trim();
+    const p2 = document.getElementById('cg-proj-part2').value.trim();
+    const year = document.getElementById('cg-year').value.trim();
+    const abrev = document.getElementById('cg-abrev').value.trim();
+
+    const contenedorCodigos = document.getElementById('cg-contenedor-codigos');
+    if (!contenedorCodigos) return;
+
+    const contenedor = document.getElementById('cg-contenedor-posiciones');
+    const posiciones = [];
+    let hayDuplicados = false;
+    const abreviaturasVistas = {};
+
+    if (contenedor) {
+        Array.from(contenedor.children).forEach(div => {
+            const inputAbrev = div.querySelector('.cg-pos-abrev');
+            const inputCant = div.querySelector('.cg-pos-cant');
+            if (!inputAbrev || !inputCant) return;
+
+            const a = (inputAbrev.value || '').trim().toUpperCase();
+            const c = parseInt(inputCant.value) || 0;
+
+            if (a) {
+                if (abreviaturasVistas[a]) {
+                    hayDuplicados = true;
+                    inputAbrev.style.borderColor = '#e30613';
+                } else {
+                    inputAbrev.style.borderColor = '#ced4da';
+                    abreviaturasVistas[a] = true;
+                }
+            }
+            if (a) posiciones.push({ abreviatura: a, cantidad: c });
+        });
+    }
+
+    if (hayDuplicados) {
+        contenedorCodigos.innerHTML = '<input type="text" readonly value="⚠️ Duplicate position abbreviations detected." style="background-color: #fff3cd; color: #856404; font-family: monospace; padding: 6px 10px; border: 1px solid #ffeeba; border-radius: 5px; font-size: 12px; width: 100%;">';
+        return;
+    }
+
+    if (p1 && p2 && year && abrev && posiciones.length > 0) {
+        let htmlCodigos = '';
+        let hayAlguno = false;
+        posiciones.forEach(pos => {
+            if (pos.cantidad > 0) {
+                hayAlguno = true;
+                const codigo = `${p1}.${p2}-${year}-${abrev}-${pos.abreviatura}`;
+                htmlCodigos += `<input type="text" readonly value="${codigo}  →  Cantidad: ${pos.cantidad}" style="background-color: #f3e8ff; font-weight: bold; color: #862e9c; font-family: monospace; letter-spacing: 1px; margin-bottom: 4px; padding: 6px 10px; border: 1px solid #d0bfff; border-radius: 5px; font-size: 12px;">`;
+            }
+        });
+        if (hayAlguno) contenedorCodigos.innerHTML = htmlCodigos;
+        else contenedorCodigos.innerHTML = '<input type="text" readonly value="Add at least one position with quantity > 0" style="background-color: #f3e8ff; color: #6c757d; font-family: monospace; padding: 6px 10px; border: 1px solid #d0bfff; border-radius: 5px; font-size: 12px;">';
+    } else {
+        contenedorCodigos.innerHTML = '<input type="text" readonly value="Fill all fields (project, year, client) to generate codes" style="background-color: #f3e8ff; color: #6c757d; font-family: monospace; padding: 6px 10px; border: 1px solid #d0bfff; border-radius: 5px; font-size: 12px;">';
+    }
+}
+
+async function saveNewCouponGlobal(event) {
+    event.preventDefault();
+    
+    const p1 = document.getElementById('cg-proj-part1').value.trim();
+    const p2 = document.getElementById('cg-proj-part2').value.trim();
+    const proyectoCompleto = `${p1}.${p2}`;
+    const year = parseInt(document.getElementById('cg-year').value) || null;
+    const abrev = document.getElementById('cg-abrev').value.trim().toUpperCase();
+    
+    const contenedor = document.getElementById('cg-contenedor-posiciones');
+    const posiciones = [];
+    Array.from(contenedor.children).forEach(div => {
+        const inputAbrev = div.querySelector('.cg-pos-abrev');
+        const inputCant = div.querySelector('.cg-pos-cant');
+        if (inputAbrev && inputCant) {
+            const a = (inputAbrev.value || '').trim().toUpperCase();
+            const c = parseInt(inputCant.value) || 0;
+            if (a && c > 0) posiciones.push({ abreviatura: a, cantidad: c });
+        }
+    });
+
+    if (posiciones.length === 0) {
+        Swal.fire({ icon: 'error', title: 'Missing quantities', text: 'Please fill at least one position with quantity > 0.', confirmButtonColor: '#e30613' });
+        return;
+    }
+
+    if (!proyectoCompleto || !year || !abrev) {
+        Swal.fire({ icon: 'error', title: 'Missing data', text: 'Please fill Project Number, Year and Client Abbreviation.', confirmButtonColor: '#e30613' });
+        return;
+    }
+
+    const codigosInternos = posiciones.map(pos => ({
+        codigo: `${proyectoCompleto}-${year}-${abrev}-${pos.abreviatura}`,
+        cantidad: pos.cantidad,
+        posicion: pos.abreviatura
+    }));
+
+    const docId = `FG_${Date.now()}`;
+    const datosCoupon = {
+        nombre: document.getElementById('cg-nombre').value.trim(),
+        cliente: document.getElementById('cg-cliente').value,
+        pais: document.getElementById('cg-pais').value.trim(),
+        planta: document.getElementById('cg-planta').value.trim(),
+        ubicacion: document.getElementById('cg-ubicacion').value.trim(),
+        proyecto: proyectoCompleto,
+        year: year,
+        estado: document.getElementById('cg-estado').value,
+        desc: document.getElementById('cg-desc').value.trim(),
+        contactoNombre: document.getElementById('cg-contacto-nombre').value.trim(),
+        contactoInfo: document.getElementById('cg-contacto-info').value.trim(),
+        foto: '',
+        codigoInterno: codigosInternos[0]?.codigo || '',
+        codigosInternos: codigosInternos,
+        posiciones: posiciones,
+        esCoupon: true,
+        origen: 'Global List (manual)',
+        ultimaActualizacion: new Date().toISOString(),
+        actualizadoPor: usuarioActual || 'Anonymous'
+    };
+
+    await db.collection("lista_fixtures_global").doc(docId).set(datosCoupon);
+    
+    await registrarModificacion(
+        'FIXTURE_GLOBAL',
+        'CREAR',
+        `Coupon "${datosCoupon.nombre}" added directly to Global List (${datosCoupon.cliente})`,
+        null, datosCoupon, 'lista_fixtures_global', docId
+    );
+
+    closeModal('modal-coupon-global');
+    Toast.fire({ icon: 'success', title: 'Coupon added to global list' });
 }

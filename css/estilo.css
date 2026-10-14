@@ -1082,6 +1082,35 @@ header {
     z-index: 9999 !important;
 }
 
+/* Eleva el modal Rename Levels sobre cualquier otro modal */
+#modal-renombrar-niveles {
+    z-index: 10001 !important;
+}
+
+/* Estilos del header de detalle con botón Rename */
+.header-detalle-flex {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 15px;
+    border-bottom: 2px solid #e30613;
+    padding-bottom: 6px;
+}
+
+.header-detalle-flex h2 {
+    border: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.header-detalle-flex .btn-renombrar {
+    font-size: 11px;
+    padding: 5px 10px;
+    margin-left: 10px;
+}
+
 /* ESTILOS CONTROL 5S HUF */
 .card-pareja-5s {
     background-color: #ffffff;

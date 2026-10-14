@@ -9,7 +9,6 @@
 <body>
 
     <!-- HUF HEADER -->
-    <!-- HUF HEADER -->
     <header>
         <div class="header-top">
             <div class="header-brand">
@@ -153,7 +152,7 @@
                 <div class="grid-lockers-tarjetas" id="contenedor-lockers"></div>
             </main>
 
-            <!-- TAB 3: COUPONS & RACKS (NUEVO) -->
+            <!-- TAB 3: COUPONS & RACKS -->
             <main id="tab-racks" class="tab-content">
                 <div class="buscador-container">
                     <h3>Search Coupons and Racks</h3>
@@ -286,12 +285,13 @@
                         </div>
                         <div style="display: flex; gap: 8px;">
                             <button id="btn-agregar-cliente-lista-global" class="btn-huf-secundario" style="padding: 10px 18px; display: none;" onclick="openModal('modal-nuevo-cliente')">+ Add Client</button>
+                            <button class="btn-huf" onclick="openNewCouponGlobalModal()" style="padding: 10px 20px; background-color: #862e9c;">+ Add Coupon</button>
                             <button class="btn-huf" onclick="openNewGlobalFixtureModal()" style="padding: 10px 20px;">+ Add Fixture to List</button>
                         </div>
                     </div>
 
                     <form class="barra-busqueda" onsubmit="searchGlobalFixture(event)" style="max-width: 700px;">
-                        <input type="text" id="buscar-fixture-global" placeholder="Search by name, client, plant, country, project...">
+                        <input type="text" id="buscar-fixture-global" placeholder="Search by name, client, plant, country, project, or code...">
                         <button type="submit" class="btn-huf">Search</button>
                         <button type="button" class="btn-huf-secundario" onclick="clearGlobalFixtureSearch()">Clear</button>
                     </form>
@@ -431,7 +431,7 @@
         </div>
     </div>
 
-    <!-- MODAL: CREATE/EDIT RACK (NUEVO) -->
+    <!-- MODAL: CREATE/EDIT RACK -->
     <div id="modal-nuevo-rack" class="modal">
         <div class="modal-contenido">
             <span class="cerrar" onclick="closeModal('modal-nuevo-rack')">&times;</span>
@@ -454,7 +454,7 @@
         </div>
     </div>
 
-    <!-- MODAL: CREATE/EDIT LOCKER (NUEVO) -->
+    <!-- MODAL: CREATE/EDIT LOCKER -->
     <div id="modal-nuevo-locker" class="modal">
         <div class="modal-contenido">
             <span class="cerrar" onclick="closeModal('modal-nuevo-locker')">&times;</span>
@@ -473,6 +473,24 @@
                 </div>
 
                 <button type="submit" class="btn-huf" style="width: 100%; margin-top: 15px;">Save Locker</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: RENAME LEVELS -->
+    <div id="modal-renombrar-niveles" class="modal">
+        <div class="modal-contenido modal-ancho">
+            <span class="cerrar" onclick="closeModal('modal-renombrar-niveles')">&times;</span>
+            <h2 id="titulo-modal-renombrar-niveles" class="modal-titulo-huf">Rename Levels</h2>
+            <p style="font-size: 12px; color: #6c757d; margin-bottom: 15px;">Leave blank to use the default name (Compartment 1, Level 1, etc.)</p>
+            <form onsubmit="saveRenameLevels(event)">
+                <input type="hidden" id="rename-tipo">
+                <input type="hidden" id="rename-id">
+                <div id="rename-inputs-container" style="display: flex; flex-direction: column; gap: 8px; max-height: 55vh; overflow-y: auto; padding-right: 5px;"></div>
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="button" class="btn-huf-secundario" style="flex: 1; background-color: #e9ecef; color: #495057;" onclick="closeModal('modal-renombrar-niveles')">Cancel</button>
+                    <button type="submit" class="btn-huf" style="flex: 1;">Save Names</button>
+                </div>
             </form>
         </div>
     </div>
@@ -578,16 +596,22 @@
     <div id="modal-locker-detalle" class="modal">
         <div class="modal-contenido modal-ancho">
             <span class="cerrar" onclick="closeModal('modal-locker-detalle')">&times;</span>
-            <h2 id="titulo-modal-locker-detalle" class="modal-titulo-huf">Locker A</h2>
+            <div class="header-detalle-flex">
+                <h2 id="titulo-modal-locker-detalle" class="modal-titulo-huf">Locker A</h2>
+                <button id="btn-renombrar-niveles-locker" class="btn-huf-secundario btn-renombrar" style="display: none;" onclick="openRenameLevelsModal('locker')">✏️ Rename Levels</button>
+            </div>
             <div id="contenido-estantes-locker" class="lista-estantes-container"></div>
         </div>
     </div>
 
-    <!-- MODAL: RACK DETAIL (NUEVO) -->
+    <!-- MODAL: RACK DETAIL -->
     <div id="modal-rack-detalle" class="modal">
         <div class="modal-contenido modal-ancho">
             <span class="cerrar" onclick="closeModal('modal-rack-detalle')">&times;</span>
-            <h2 id="titulo-modal-rack-detalle" class="modal-titulo-huf">Rack A</h2>
+            <div class="header-detalle-flex">
+                <h2 id="titulo-modal-rack-detalle" class="modal-titulo-huf">Rack A</h2>
+                <button id="btn-renombrar-niveles-rack" class="btn-huf-secundario btn-renombrar" style="display: none;" onclick="openRenameLevelsModal('rack')">✏️ Rename Levels</button>
+            </div>
             <div id="contenido-niveles-rack" class="lista-estantes-container"></div>
         </div>
     </div>
@@ -664,7 +688,7 @@
         </div>
     </div>
 
-    <!-- MODAL: ADD/EDIT RACK PIECE (with new fields) -->
+    <!-- MODAL: ADD/EDIT RACK PIECE -->
     <div id="modal-editar-pieza-rack" class="modal" style="display: none;">
         <div class="modal-contenido modal-ancho">
             <span class="cerrar" onclick="closeModal('modal-editar-pieza-rack')">&times;</span>
@@ -715,14 +739,11 @@
                     </div>
                 </div>
 
-                <!-- SECCIÓN DE POSICIONES DINÁMICAS -->
                 <div class="form-group" style="background: #f8f9fa; padding: 12px; border-radius: 6px; border: 1px solid #dee2e6;">
                     <label style="font-weight: bold; color: #e30613; margin-bottom: 10px; display: block;">Positions & Quantities *</label>
                     <p style="font-size: 11px; color: #6c757d; margin-bottom: 10px;">Add positions and assign quantities. You can add multiple positions with the "+ Add Position" button.</p>
                     
-                    <div id="contenedor-posiciones-rack" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px;">
-                        <!-- Las posiciones dinámicas se generarán aquí -->
-                    </div>
+                    <div id="contenedor-posiciones-rack" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px;"></div>
                     
                     <button type="button" class="btn-huf-secundario" style="width: 100%; padding: 10px; font-size: 13px;" onclick="agregarPosicionRack()">+ Add Position</button>
                     
@@ -750,6 +771,14 @@
 
                 <div id="rack-preview-foto-miniatura" style="display: none; margin-top: 10px; text-align: center;">
                     <img id="rack-img-pieza-miniatura-prev" src="" style="max-width: 100%; max-height: 120px; border-radius: 6px;">
+                </div>
+
+                <div class="form-group" style="background: #f3e8ff; border: 1px solid #d0bfff; padding: 12px; border-radius: 6px; margin-top: 15px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 0; font-weight: normal;">
+                        <input type="checkbox" id="check-agregar-coupon-global" style="width: auto; transform: scale(1.3); cursor: pointer;">
+                        <span style="font-size: 13px; color: #862e9c; font-weight: 600;">📋 Also add to Global Fixtures List</span>
+                    </label>
+                    <p style="font-size: 11px; color: #6c757d; margin: 6px 0 0 0;">Check this box if other plants should be able to see this coupon and its code/location.</p>
                 </div>
 
                 <button type="submit" class="btn-huf" style="width: 100%; margin-top: 15px;">Save Coupon</button>
@@ -913,6 +942,7 @@
             <h2 id="titulo-modal-fixture-global" class="modal-titulo-huf">Add Fixture to Global List</h2>
             <form onsubmit="saveGlobalFixture(event)">
                 <input type="hidden" id="fixture-global-id-editar">
+                <input type="hidden" id="fg-codigo-interno-oculto">
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                     <div class="form-group">
@@ -939,7 +969,7 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Specific Location:</label>
+                    <label>Specific Location (Lab):</label>
                     <input type="text" id="fg-ubicacion" placeholder="Ex: Bay 2, Shelf A, External Locker...">
                 </div>
 
@@ -960,14 +990,34 @@
                     <input type="hidden" id="fg-proyecto">
                 </div>
 
+                <!-- SECCIÓN DE COUPON (solo visible cuando se envía desde rack) -->
+                <div id="fg-seccion-coupon" style="display: none; background: #f3e8ff; border: 1px solid #d0bfff; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
+                    <h4 style="font-size: 13px; color: #862e9c; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">🔢 Coupons <span style="background: #862e9c; color: white; font-size: 10px; padding: 2px 8px; border-radius: 10px;">From Rack</span></h4>
+                    
+                    <div class="form-group" style="margin-bottom: 10px;">
+                        <label>Internal Recognition Code:</label>
+                        <input type="text" id="fg-codigo-interno" readonly style="background-color: #fff5f5; font-weight: bold; color: #862e9c; font-family: monospace; letter-spacing: 1px;">
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 10px;">
+                        <label>Coupon Year:</label>
+                        <input type="text" id="fg-coupon-year" readonly style="background-color: #f8f9fa; font-weight: 600;">
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Positions & Quantities:</label>
+                        <div id="fg-coupon-posiciones" style="display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; background: #ffffff; border-radius: 6px; border: 1px solid #e9ecef;"></div>
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label>Fixture Status:</label>
                     <select id="fg-estado" style="width: 100%; padding: 8px 12px; border-radius: 5px; border: 1px solid #ced4da; background: #f8f9fa;">
-                        <option value="Available">Available</option>
-                        <option value="In use">In use</option>
-                        <option value="Under repair">Under repair</option>
-                        <option value="In transit">In transit</option>
-                        <option value="Out of service">Out of service</option>
+                        <option value="Available">🟢 Available</option>
+                        <option value="In use">🟠 In use</option>
+                        <option value="Under repair">🟡 Under repair</option>
+                        <option value="In transit">🟣 In transit</option>
+                        <option value="Out of service">⚫ Out of service</option>
                     </select>
                 </div>
 
@@ -1001,6 +1051,117 @@
                 </div>
 
                 <button type="submit" class="btn-huf" style="width: 100%; margin-top: 15px;">Save Global Fixture</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: ADD COUPON DIRECTLY FROM GLOBAL LIST -->
+    <div id="modal-coupon-global" class="modal">
+        <div class="modal-contenido modal-ancho">
+            <span class="cerrar" onclick="closeModal('modal-coupon-global')">&times;</span>
+            <h2 class="modal-titulo-huf" style="border-bottom-color: #862e9c;">🔢 Add Coupon to Global List</h2>
+            <p style="font-size: 12px; color: #6c757d; margin-bottom: 15px;">Create a coupon directly in the global catalog. It will generate an internal code automatically.</p>
+            <form onsubmit="saveNewCouponGlobal(event)">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label>Coupon Name: *</label>
+                        <input type="text" id="cg-nombre" required placeholder="Ex. Coupon C-01">
+                    </div>
+                    <div class="form-group">
+                        <label>Client: *</label>
+                        <select id="cg-cliente" required onchange="autoFillCouponGlobalAbbreviation()">
+                            <option value="">-- Select a client --</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label>Client Abbreviation:</label>
+                        <input type="text" id="cg-abrev" readonly style="background-color: #e9ecef; font-weight: bold; color: #862e9c;">
+                    </div>
+                    <div class="form-group">
+                        <label>Year: *</label>
+                        <input type="number" id="cg-year" min="2000" max="2100" placeholder="Ex: 2025" required onkeyup="updateCouponGlobalCodes()" onchange="updateCouponGlobalCodes()">
+                    </div>
+                    <div class="form-group">
+                        <label>Project Number (format 0000.000): *</label>
+                        <div class="mascara-proyecto">
+                            <input type="text" id="cg-proj-part1" placeholder="0000" maxlength="4" pattern="\d{4}" required
+                                    title="Please enter exactly 4 digits (0-9)"
+                                    oninvalid="this.setCustomValidity('Please enter exactly 4 digits (0-9)')"
+                                    oninput="this.setCustomValidity(''); updateCouponGlobalCodes();"
+                                    onkeyup="autotab(this, 'cg-proj-part2'); updateCouponGlobalCodes();">
+                            <span class="separador-punto">.</span>
+                            <input type="text" id="cg-proj-part2" placeholder="003" maxlength="3" pattern="\d{3}" required
+                                    title="Please enter exactly 3 digits (0-9)"
+                                    oninvalid="this.setCustomValidity('Please enter exactly 3 digits (0-9)')"
+                                    oninput="this.setCustomValidity(''); updateCouponGlobalCodes();"
+                                    onkeyup="updateCouponGlobalCodes()">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group" style="background: #f3e8ff; padding: 12px; border-radius: 6px; border: 1px solid #d0bfff;">
+                    <label style="font-weight: bold; color: #862e9c; margin-bottom: 10px; display: block;">Positions & Quantities *</label>
+                    <div id="cg-contenedor-posiciones" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px;"></div>
+                    <button type="button" class="btn-huf-secundario" style="width: 100%; padding: 10px; font-size: 13px; background-color: #862e9c;" onclick="agregarPosicionCouponGlobal()">+ Add Position</button>
+                </div>
+
+                <div class="form-group">
+                    <label>Internal Recognition Code(s) (auto-generated):</label>
+                    <div id="cg-contenedor-codigos" style="display: flex; flex-direction: column; gap: 6px;">
+                        <input type="text" readonly style="background-color: #fff5f5; font-weight: bold; color: #862e9c; font-family: monospace; letter-spacing: 1px;" placeholder="Codes will be generated here">
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label>Country: *</label>
+                        <input type="text" id="cg-pais" required placeholder="Ex: Mexico, Germany...">
+                    </div>
+                    <div class="form-group">
+                        <label>Plant / City: *</label>
+                        <input type="text" id="cg-planta" required placeholder="Ex: Puebla Plant...">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Specific Location (Lab):</label>
+                    <input type="text" id="cg-ubicacion" placeholder="Ex: Bay 2, Shelf A, Rack A - Level 2...">
+                </div>
+
+                <div class="form-group">
+                    <label>Coupon Status:</label>
+                    <select id="cg-estado" style="width: 100%; padding: 8px 12px; border-radius: 5px; border: 1px solid #ced4da; background: #f8f9fa;">
+                        <option value="Available">🟢 Available</option>
+                        <option value="In use">🟠 In use</option>
+                        <option value="Under repair">🟡 Under repair</option>
+                        <option value="In transit">🟣 In transit</option>
+                        <option value="Out of service">⚫ Out of service</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Description / Notes:</label>
+                    <textarea id="cg-desc" rows="3" placeholder="Coupon details..."></textarea>
+                </div>
+
+                <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; border: 1px solid #dee2e6; margin-bottom: 15px;">
+                    <h4 style="font-size: 13px; color: #862e9c; margin-bottom: 10px;">📞 Plant Contact</h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div class="form-group" style="margin: 0;">
+                            <label>Contact Name:</label>
+                            <input type="text" id="cg-contacto-nombre" placeholder="Ex: John Smith">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label>Email or Phone:</label>
+                            <input type="text" id="cg-contacto-info" placeholder="Ex: john@huf.com">
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-huf" style="width: 100%; margin-top: 15px; background-color: #862e9c;">Save Coupon to Global List</button>
             </form>
         </div>
     </div>
