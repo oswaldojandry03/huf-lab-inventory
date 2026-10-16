@@ -1720,6 +1720,31 @@ function generarContenidoLockerDetail(locker, cont) {
                 const estadoInfo = ESTADOS_DISPONIBLES[p.estado] || ESTADOS_DISPONIBLES['Available'];
                 const estadoBadge = `<button onclick="openEstadoSelector('locker', '${lockerId}', ${d}, ${idx}, event)" style="background: ${estadoInfo.color}; color: white; border: none; padding: 2px 10px; border-radius: 12px; font-size: 10px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; margin-bottom: 6px;">${estadoInfo.emoji} ${estadoInfo.label} ▾</button>`;
 
+                // Cantidad simple
+                const cantidadHTML = (p.cantidad !== undefined && p.cantidad !== '' && p.cantidad !== null)
+                    ? `<p style="margin:0; font-size:11px; color:#495057;"><strong>Quantity:</strong> ${p.cantidad} pcs</p>`
+                    : '';
+
+                // Códigos internos
+                let codigosHTML = '';
+                if (p.codigosInternos && p.codigosInternos.length > 0) {
+                    codigosHTML = '<div style="margin: 6px 0; display: flex; flex-direction: column; gap: 3px;">';
+                    p.codigosInternos.forEach(cod => {
+                        codigosHTML += `<span style="font-family: monospace; font-size: 11px; color: #862e9c; font-weight: bold; background: #f3e8ff; padding: 3px 8px; border-radius: 4px; border: 1px solid #d0bfff; display: inline-block; width: fit-content;">🔢 ${cod.codigo} <span style="color: #495057; font-weight: normal;">→ Quantity: ${cod.cantidad}</span></span>`;
+                    });
+                    codigosHTML += '</div>';
+                }
+
+                // Posiciones
+                let posicionesHTML = '';
+                if (p.posiciones && p.posiciones.length > 0) {
+                    posicionesHTML = '<div style="margin: 6px 0; display: flex; flex-wrap: wrap; gap: 4px;">';
+                    p.posiciones.forEach(pos => {
+                        posicionesHTML += `<span style="background: #e9ecef; padding: 2px 6px; border-radius: 4px; font-size: 10px; color: #495057;"><strong>${pos.abreviatura}</strong>: ${pos.cantidad}</span>`;
+                    });
+                    posicionesHTML += '</div>';
+                }
+
                 htmlPiezas += `
                     <div style="background:#f8f9fa; border:1px solid #e9ecef; border-radius:8px; padding:12px; display:flex; gap:12px; align-items:flex-start; position:relative;">
                         ${imgTag}
@@ -1729,6 +1754,10 @@ function generarContenidoLockerDetail(locker, cont) {
                             <p style="margin:0; font-size:11px; color:#495057;"><strong>Client:</strong> ${p.cliente || 'N/A'}</p>
                             <p style="margin:0; font-size:11px; color:#495057;"><strong>Location:</strong> ${p.localidad || 'N/A'}</p>
                             <p style="margin:0; font-size:11px; color:#495057;"><strong>Project:</strong> ${p.proyecto || 'N/A'}</p>
+                            ${p.year ? `<p style="margin:0; font-size:11px; color:#495057;"><strong>Year:</strong> ${p.year}</p>` : ''}
+                            ${cantidadHTML}
+                            ${codigosHTML}
+                            ${posicionesHTML}
                             <button style="margin-top:6px; background:none; border:none; color:#e30613; font-size:11px; font-weight:bold; padding:0; cursor:pointer; text-decoration:underline;" onclick='viewFullFixtureDetail(${fixtureJSON})'>View more / Details</button>
                             ${btnAcciones}
                         </div>
@@ -1767,9 +1796,9 @@ function viewFullFixtureDetail(fixture) {
         `;
         fixture.codigosInternos.forEach(cod => {
             codigosHTML += `
-                <div style="background: #fff5f5; border: 1px solid #ffc9c9; border-radius: 6px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
-                    <span style="font-family: monospace; font-weight: bold; color: #e30613; font-size: 13px;">${cod.codigo}</span>
-                    <span style="background: #e30613; color: white; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: bold; white-space: nowrap;">Cantidad: ${cod.cantidad}</span>
+                <div style="background: #f3e8ff; border: 1px solid #d0bfff; border-radius: 6px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                    <span style="font-family: monospace; font-weight: bold; color: #862e9c; font-size: 13px;">${cod.codigo}</span>
+                    <span style="background: #862e9c; color: white; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: bold; white-space: nowrap;">Quantity: ${cod.cantidad}</span>
                 </div>
             `;
         });
@@ -1788,9 +1817,12 @@ function viewFullFixtureDetail(fixture) {
         posicionesHTML += `</div>`;
     }
 
-    // Estado info
     const estadoInfo = ESTADOS_DISPONIBLES[fixture.estado] || ESTADOS_DISPONIBLES['Available'];
     const estadoHTML = `<p><strong>Status:</strong> <span style="background: ${estadoInfo.color}; color: white; padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: bold;">${estadoInfo.emoji} ${estadoInfo.label}</span></p>`;
+
+    const cantidadHTML = (fixture.cantidad !== undefined && fixture.cantidad !== '' && fixture.cantidad !== null)
+        ? `<p><strong>Quantity:</strong> ${fixture.cantidad} pcs</p>`
+        : '';
 
     Swal.fire({
         title: fixture.nombre,
@@ -1802,6 +1834,7 @@ function viewFullFixtureDetail(fixture) {
                 <p><strong>Location:</strong> ${fixture.localidad || 'N/A'}</p>
                 <p><strong>Project:</strong> ${fixture.proyecto || 'N/A'}</p>
                 ${fixture.year ? `<p><strong>Year:</strong> ${fixture.year}</p>` : ''}
+                ${cantidadHTML}
                 ${codigosHTML}
                 ${posicionesHTML}
                 <hr style="margin: 10px 0;">
@@ -1823,15 +1856,25 @@ function openAddPieceModal(lockerId, divNum) {
     document.getElementById('input-pieza-nombre').value = '';
     document.getElementById('input-pieza-cliente').value = '';
     document.getElementById('input-pieza-localidad').value = '';
-    const proj1 = document.getElementById('proj-part1');
-    const proj2 = document.getElementById('proj-part2');
-    if (proj1) proj1.value = '';
-    if (proj2) proj2.value = '';
-    document.getElementById('input-pieza-proyecto').value = '';
+    document.getElementById('input-pieza-cantidad').value = '';
     document.getElementById('input-pieza-desc').value = '';
     document.getElementById('input-pieza-foto-file').value = '';
     document.getElementById('input-pieza-foto-base64').value = '';
     document.getElementById('preview-foto-miniatura').style.display = 'none';
+
+    // Reset More Data Options
+    const checkMore = document.getElementById('check-more-data-options');
+    if (checkMore) checkMore.checked = false;
+    const seccion = document.getElementById('seccion-more-data-options');
+    if (seccion) seccion.style.display = 'none';
+    document.getElementById('pieza-abrev').value = '';
+    document.getElementById('pieza-year').value = new Date().getFullYear();
+    document.getElementById('pieza-proj-part1').value = '';
+    document.getElementById('pieza-proj-part2').value = '';
+    document.getElementById('contenedor-posiciones-locker').innerHTML = '';
+    contadorPosicionesLocker = 0;
+    document.getElementById('contenedor-codigos-locker').innerHTML = '<input type="text" readonly value="Fill all fields (project, year, client) to generate codes" style="background-color: #f3e8ff; color: #6c757d; font-family: monospace; letter-spacing: 1px; padding: 6px 10px; border: 1px solid #d0bfff; border-radius: 5px; font-size: 12px;">';
+
     const check = document.getElementById('check-agregar-a-lista-global');
     if (check) check.checked = false;
 
@@ -1853,16 +1896,7 @@ function openEditPieceModal(lockerId, divNum, index) {
     document.getElementById('input-pieza-nombre').value = pieza.nombre || '';
     document.getElementById('input-pieza-cliente').value = pieza.cliente || '';
     document.getElementById('input-pieza-localidad').value = pieza.localidad || '';
-
-    if (pieza.proyecto && pieza.proyecto.includes('.')) {
-        const partes = pieza.proyecto.split('.');
-        document.getElementById('proj-part1').value = partes[0] || '';
-        document.getElementById('proj-part2').value = partes[1] || '';
-    } else {
-        document.getElementById('proj-part1').value = '';
-        document.getElementById('proj-part2').value = '';
-    }
-
+    document.getElementById('input-pieza-cantidad').value = pieza.cantidad || '';
     document.getElementById('input-pieza-desc').value = pieza.desc || '';
     document.getElementById('input-pieza-foto-base64').value = pieza.foto || '';
 
@@ -1872,6 +1906,29 @@ function openEditPieceModal(lockerId, divNum, index) {
     } else {
         document.getElementById('preview-foto-miniatura').style.display = 'none';
     }
+
+    // Cargar More Data Options si la pieza los tiene
+    const checkMore = document.getElementById('check-more-data-options');
+    const seccion = document.getElementById('seccion-more-data-options');
+    const tieneMoreData = !!(pieza.posiciones && pieza.posiciones.length > 0) || !!pieza.codigoInterno;
+
+    if (checkMore) checkMore.checked = tieneMoreData;
+    if (seccion) seccion.style.display = tieneMoreData ? 'block' : 'none';
+
+    // Project number partido
+    if (pieza.proyecto && pieza.proyecto.includes('.')) {
+        const partes = pieza.proyecto.split('.');
+        document.getElementById('pieza-proj-part1').value = partes[0] || '';
+        document.getElementById('pieza-proj-part2').value = partes[1] || '';
+    } else {
+        document.getElementById('pieza-proj-part1').value = '';
+        document.getElementById('pieza-proj-part2').value = '';
+    }
+
+    document.getElementById('pieza-year').value = pieza.year || new Date().getFullYear();
+    document.getElementById('pieza-abrev').value = pieza.abreviatura || '';
+
+    cargarPosicionesLocker(pieza.posiciones || null);
 
     const check = document.getElementById('check-agregar-a-lista-global');
     if (check) check.checked = false;
@@ -1919,22 +1976,112 @@ async function saveLockerPiece(event) {
     const index = document.getElementById('pieza-index').value;
     const key = `${lockerId}-${divNum}`;
 
-    const part1 = document.getElementById('proj-part1').value.trim();
-    const part2 = document.getElementById('proj-part2').value.trim();
-    const proyectoCompleto = `${part1}.${part2}`;
+    const part1 = document.getElementById('pieza-proj-part1').value.trim();
+    const part2 = document.getElementById('pieza-proj-part2').value.trim();
+    const proyectoCompleto = (part1 && part2) ? `${part1}.${part2}` : '';
+
+    const checkMore = document.getElementById('check-more-data-options');
+    const moreDataActivo = checkMore && checkMore.checked;
 
     const esNuevo = (index === "");
     const estadoActual = esNuevo ? 'Available' : (inventarioLockers[key][parseInt(index)]?.estado || 'Available');
 
+    // Datos base del fixture
     const piezaData = {
         nombre: document.getElementById('input-pieza-nombre').value.trim(),
         cliente: document.getElementById('input-pieza-cliente').value,
         localidad: document.getElementById('input-pieza-localidad').value.trim(),
-        proyecto: proyectoCompleto,
+        proyecto: proyectoCompleto || document.getElementById('input-pieza-localidad').value.trim(),
         desc: document.getElementById('input-pieza-desc').value.trim(),
         foto: document.getElementById('input-pieza-foto-base64').value || '',
         estado: estadoActual
     };
+
+    // Cantidad simple (solo si NO está activo more data options)
+    const cantidadSimple = document.getElementById('input-pieza-cantidad').value.trim();
+    if (!moreDataActivo && cantidadSimple !== '') {
+        piezaData.cantidad = parseInt(cantidadSimple) || 0;
+    } else {
+        piezaData.cantidad = '';
+    }
+
+    // Si está activo "More data options" → procesar posiciones y códigos
+    if (moreDataActivo) {
+        const year = parseInt(document.getElementById('pieza-year').value) || null;
+        const abrev = document.getElementById('pieza-abrev').value.trim().toUpperCase();
+
+        const contenedor = document.getElementById('contenedor-posiciones-locker');
+        const todasLasPosiciones = [];
+        if (contenedor) {
+            Array.from(contenedor.children).forEach(div => {
+                const inputAbrev = div.querySelector('.lk-pos-abrev');
+                const inputCant = div.querySelector('.lk-pos-cant');
+                if (inputAbrev && inputCant) {
+                    const a = (inputAbrev.value || '').trim().toUpperCase();
+                    const c = parseInt(inputCant.value) || 0;
+                    if (a) todasLasPosiciones.push({ abreviatura: a, cantidad: c });
+                }
+            });
+        }
+
+        const totalCantidad = todasLasPosiciones.reduce((sum, pos) => sum + (parseInt(pos.cantidad) || 0), 0);
+        if (totalCantidad <= 0) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Missing quantities',
+                text: 'Please fill at least one position with a quantity greater than 0, or uncheck "More data options".',
+                confirmButtonColor: '#e30613'
+            });
+            return;
+        }
+
+        const abrevsVistas = {};
+        const duplicadas = [];
+        todasLasPosiciones.forEach(pos => {
+            if (abrevsVistas[pos.abreviatura]) {
+                if (!duplicadas.includes(pos.abreviatura)) duplicadas.push(pos.abreviatura);
+            } else {
+                abrevsVistas[pos.abreviatura] = true;
+            }
+        });
+        if (duplicadas.length > 0) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Duplicate position abbreviations',
+                html: `The following position abbreviation(s) are duplicated:<br><strong style="color:#e30613;">${duplicadas.join(', ')}</strong><br><br>Each position must have a unique abbreviation.`,
+                confirmButtonColor: '#e30613'
+            });
+            return;
+        }
+
+        if (!proyectoCompleto || !year || !abrev) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Missing data',
+                text: 'Please fill Project Number, Year and Client Abbreviation to generate the internal codes.',
+                confirmButtonColor: '#e30613'
+            });
+            return;
+        }
+
+        const codigosInternos = [];
+        todasLasPosiciones.forEach(pos => {
+            if (pos.cantidad > 0) {
+                codigosInternos.push({
+                    codigo: `${proyectoCompleto}-${year}-${abrev}-${pos.abreviatura}`,
+                    cantidad: pos.cantidad,
+                    posicion: pos.abreviatura
+                });
+            }
+        });
+
+        piezaData.abreviatura = abrev;
+        piezaData.year = year;
+        piezaData.proyecto = proyectoCompleto;
+        piezaData.posiciones = todasLasPosiciones.filter(p => parseInt(p.cantidad) > 0);
+        piezaData.codigosInternos = codigosInternos;
+        piezaData.codigoInterno = codigosInternos[0]?.codigo || '';
+    }
 
     if (!inventarioLockers[key]) inventarioLockers[key] = [];
     const piezaAnterior = (index !== "" && inventarioLockers[key][parseInt(index)]) ? inventarioLockers[key][parseInt(index)] : null;
@@ -2376,7 +2523,7 @@ function generarContenidoRackDetail(rack, cont) {
                 if (p.codigosInternos && p.codigosInternos.length > 0) {
                     codigosHTML = '<div style="margin: 6px 0; display: flex; flex-direction: column; gap: 3px;">';
                     p.codigosInternos.forEach(cod => {
-                        codigosHTML += `<span style="font-family: monospace; font-size: 11px; color: #e30613; font-weight: bold; background: #fff5f5; padding: 3px 8px; border-radius: 4px; border: 1px solid #ffc9c9; display: inline-block; width: fit-content;">🔢 ${cod.codigo} <span style="color: #495057; font-weight: normal;">→ Cantidad: ${cod.cantidad}</span></span>`;
+                        codigosHTML += `<span style="font-family: monospace; font-size: 11px; color: #e30613; font-weight: bold; background: #fff5f5; padding: 3px 8px; border-radius: 4px; border: 1px solid #ffc9c9; display: inline-block; width: fit-content;">🔢 ${cod.codigo} <span style="color: #495057; font-weight: normal;">→ Quantity: ${cod.cantidad}</span></span>`;
                     });
                     codigosHTML += '</div>';
                 }
@@ -2489,7 +2636,7 @@ function updateRackInternalCodes() {
             if (pos.cantidad > 0) {
                 hayAlguno = true;
                 const codigo = `${p1}.${p2}-${year}-${abrev}-${pos.abreviatura}`;
-                htmlCodigos += `<input type="text" readonly value="${codigo}  →  Cantidad: ${pos.cantidad}" style="background-color: #fff5f5; font-weight: bold; color: #e30613; font-family: monospace; letter-spacing: 1px; margin-bottom: 4px; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 5px; font-size: 12px;">`;
+                htmlCodigos += `<input type="text" readonly value="${codigo}  →  Quantity: ${pos.cantidad}" style="background-color: #fff5f5; font-weight: bold; color: #e30613; font-family: monospace; letter-spacing: 1px; margin-bottom: 4px; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 5px; font-size: 12px;">`;
             }
         });
         if (hayAlguno) {
@@ -3919,6 +4066,162 @@ function toggleDescripcion(cardId, btn) {
 }
 
 // =============================================================
+// LOCKER FIXTURE - MORE DATA OPTIONS (Year, Project, Positions, Codes)
+// =============================================================
+let contadorPosicionesLocker = 0;
+
+function toggleLockerMoreOptions() {
+    const check = document.getElementById('check-more-data-options');
+    const seccion = document.getElementById('seccion-more-data-options');
+    if (!check || !seccion) return;
+
+    if (check.checked) {
+        seccion.style.display = 'block';
+        // Auto-generar posiciones por defecto si el contenedor está vacío
+        const cont = document.getElementById('contenedor-posiciones-locker');
+        if (cont && cont.children.length === 0) {
+            agregarPosicionLocker('FL', 0);
+            agregarPosicionLocker('FR', 0);
+            agregarPosicionLocker('RL', 0);
+            agregarPosicionLocker('RR', 0);
+        }
+        autoFillLockerAbbreviation();
+        updateLockerInternalCodes();
+    } else {
+        seccion.style.display = 'none';
+    }
+}
+
+function autoFillLockerAbbreviation() {
+    const clientName = document.getElementById('input-pieza-cliente').value;
+    const client = listaClientesFirebase.find(c => c.nombre === clientName);
+    const abrevField = document.getElementById('pieza-abrev');
+    if (abrevField) {
+        abrevField.value = client && client.abreviatura ? client.abreviatura : '';
+    }
+    updateLockerInternalCodes();
+}
+
+function agregarPosicionLocker(abreviatura = '', cantidad = 0) {
+    contadorPosicionesLocker++;
+    const posId = `lk_pos_${contadorPosicionesLocker}`;
+    const contenedor = document.getElementById('contenedor-posiciones-locker');
+    if (!contenedor) return;
+
+    const div = document.createElement('div');
+    div.id = posId;
+    div.style.cssText = "display: flex; gap: 8px; align-items: center; background: #ffffff; padding: 8px 10px; border-radius: 6px; border: 1px solid #dee2e6;";
+
+    div.innerHTML = `
+        <input type="text" class="lk-pos-abrev" placeholder="Abrev. (ej: FL)" value="${abreviatura}" maxlength="5" style="width: 100px; padding: 6px 8px; border-radius: 4px; border: 1px solid #ced4da; background: #f8f9fa; font-size: 12px; text-transform: uppercase;" onkeyup="updateLockerInternalCodes()" onchange="updateLockerInternalCodes()">
+        <input type="number" class="lk-pos-cant" placeholder="Cant." value="${cantidad}" min="0" style="width: 80px; padding: 6px 8px; border-radius: 4px; border: 1px solid #ced4da; background: #f8f9fa; font-size: 12px;" onkeyup="updateLockerInternalCodes()" onchange="updateLockerInternalCodes()">
+        <button type="button" onclick="eliminarPosicionLocker('${posId}')" style="background: #fff5f5; border: 1px solid #ffc9c9; color: #e30613; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px;">&times;</button>
+    `;
+
+    contenedor.appendChild(div);
+    updateLockerInternalCodes();
+}
+
+function eliminarPosicionLocker(posId) {
+    const div = document.getElementById(posId);
+    if (div) {
+        div.remove();
+        updateLockerInternalCodes();
+    }
+}
+
+function cargarPosicionesLocker(posiciones) {
+    const contenedor = document.getElementById('contenedor-posiciones-locker');
+    if (!contenedor) return;
+    contenedor.innerHTML = '';
+    contadorPosicionesLocker = 0;
+
+    if (posiciones && posiciones.length > 0) {
+        posiciones.forEach(pos => {
+            contadorPosicionesLocker++;
+            const posId = `lk_pos_${contadorPosicionesLocker}`;
+            const div = document.createElement('div');
+            div.id = posId;
+            div.style.cssText = "display: flex; gap: 8px; align-items: center; background: #ffffff; padding: 8px 10px; border-radius: 6px; border: 1px solid #dee2e6;";
+            div.innerHTML = `
+                <input type="text" class="lk-pos-abrev" placeholder="Abrev. (ej: FL)" value="${pos.abreviatura || ''}" maxlength="5" style="width: 100px; padding: 6px 8px; border-radius: 4px; border: 1px solid #ced4da; background: #f8f9fa; font-size: 12px; text-transform: uppercase;" onkeyup="updateLockerInternalCodes()" onchange="updateLockerInternalCodes()">
+                <input type="number" class="lk-pos-cant" placeholder="Cant." value="${pos.cantidad || 0}" min="0" style="width: 80px; padding: 6px 8px; border-radius: 4px; border: 1px solid #ced4da; background: #f8f9fa; font-size: 12px;" onkeyup="updateLockerInternalCodes()" onchange="updateLockerInternalCodes()">
+                <button type="button" onclick="eliminarPosicionLocker('${posId}')" style="background: #fff5f5; border: 1px solid #ffc9c9; color: #e30613; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px;">&times;</button>
+            `;
+            contenedor.appendChild(div);
+        });
+    }
+    updateLockerInternalCodes();
+}
+
+function updateLockerInternalCodes() {
+    const p1 = document.getElementById('pieza-proj-part1')?.value.trim() || '';
+    const p2 = document.getElementById('pieza-proj-part2')?.value.trim() || '';
+    const year = document.getElementById('pieza-year')?.value.trim() || '';
+    const abrev = document.getElementById('pieza-abrev')?.value.trim() || '';
+
+    const contenedorCodigos = document.getElementById('contenedor-codigos-locker');
+    if (!contenedorCodigos) return;
+
+    const contenedor = document.getElementById('contenedor-posiciones-locker');
+    const posiciones = [];
+    let hayDuplicados = false;
+    const abreviaturasVistas = {};
+
+    if (contenedor) {
+        Array.from(contenedor.children).forEach(div => {
+            const inputAbrev = div.querySelector('.lk-pos-abrev');
+            const inputCant = div.querySelector('.lk-pos-cant');
+            if (!inputAbrev || !inputCant) return;
+
+            const a = (inputAbrev.value || '').trim().toUpperCase();
+            const c = parseInt(inputCant.value) || 0;
+
+            if (a) {
+                if (abreviaturasVistas[a]) {
+                    hayDuplicados = true;
+                    inputAbrev.style.borderColor = '#e30613';
+                    inputAbrev.style.backgroundColor = '#fff5f5';
+                } else {
+                    inputAbrev.style.borderColor = '#ced4da';
+                    inputAbrev.style.backgroundColor = '#f8f9fa';
+                    abreviaturasVistas[a] = true;
+                }
+            } else {
+                inputAbrev.style.borderColor = '#ced4da';
+                inputAbrev.style.backgroundColor = '#f8f9fa';
+            }
+
+            if (a) posiciones.push({ abreviatura: a, cantidad: c });
+        });
+    }
+
+    if (hayDuplicados) {
+        contenedorCodigos.innerHTML = '<input type="text" readonly value="⚠️ Duplicate position abbreviations detected." style="background-color: #fff3cd; color: #856404; font-family: monospace; letter-spacing: 1px; padding: 6px 10px; border: 1px solid #ffeeba; border-radius: 5px; font-size: 12px; width: 100%;">';
+        return;
+    }
+
+    if (p1 && p2 && year && abrev && posiciones.length > 0) {
+        let htmlCodigos = '';
+        let hayAlguno = false;
+        posiciones.forEach(pos => {
+            if (pos.cantidad > 0) {
+                hayAlguno = true;
+                const codigo = `${p1}.${p2}-${year}-${abrev}-${pos.abreviatura}`;
+                htmlCodigos += `<input type="text" readonly value="${codigo}  →  Quantity: ${pos.cantidad}" style="background-color: #f3e8ff; font-weight: bold; color: #862e9c; font-family: monospace; letter-spacing: 1px; margin-bottom: 4px; padding: 6px 10px; border: 1px solid #d0bfff; border-radius: 5px; font-size: 12px;">`;
+            }
+        });
+        if (hayAlguno) {
+            contenedorCodigos.innerHTML = htmlCodigos;
+        } else {
+            contenedorCodigos.innerHTML = '<input type="text" readonly value="Add at least one position with quantity > 0" style="background-color: #f3e8ff; color: #6c757d; font-family: monospace; letter-spacing: 1px; padding: 6px 10px; border: 1px solid #d0bfff; border-radius: 5px; font-size: 12px;">';
+        }
+    } else {
+        contenedorCodigos.innerHTML = '<input type="text" readonly value="Fill all fields (project, year, client) to generate codes" style="background-color: #f3e8ff; color: #6c757d; font-family: monospace; letter-spacing: 1px; padding: 6px 10px; border: 1px solid #d0bfff; border-radius: 5px; font-size: 12px;">';
+    }
+}
+
+// =============================================================
 // 8. ADD COUPON FROM GLOBAL LIST
 // =============================================================
 function openNewCouponGlobalModal() {
@@ -4033,7 +4336,7 @@ function updateCouponGlobalCodes() {
             if (pos.cantidad > 0) {
                 hayAlguno = true;
                 const codigo = `${p1}.${p2}-${year}-${abrev}-${pos.abreviatura}`;
-                htmlCodigos += `<input type="text" readonly value="${codigo}  →  Cantidad: ${pos.cantidad}" style="background-color: #f3e8ff; font-weight: bold; color: #862e9c; font-family: monospace; letter-spacing: 1px; margin-bottom: 4px; padding: 6px 10px; border: 1px solid #d0bfff; border-radius: 5px; font-size: 12px;">`;
+                htmlCodigos += `<input type="text" readonly value="${codigo}  →  Quantity: ${pos.cantidad}" style="background-color: #f3e8ff; font-weight: bold; color: #862e9c; font-family: monospace; letter-spacing: 1px; margin-bottom: 4px; padding: 6px 10px; border: 1px solid #d0bfff; border-radius: 5px; font-size: 12px;">`;
             }
         });
         if (hayAlguno) contenedorCodigos.innerHTML = htmlCodigos;
