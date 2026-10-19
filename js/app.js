@@ -123,6 +123,8 @@ let historialGraficasGuardado = [];
 
 let chartBusquedasInstance = null;
 let chartMaterialesInstance = null;
+let chartCabinetsTopInstance = null;
+let chartsSubtabActual = 'overview';
 
 let usuarioActual = null;
 let usuarioUID = null;
@@ -246,13 +248,17 @@ function escucharFirestore() {
         listaEstructuraGabinetes = [];
         snapshot.forEach((doc) => { listaEstructuraGabinetes.push({ id: doc.id, ...doc.data() }); });
         if (listaEstructuraGabinetes.length === 0) crearGabinetesPorDefecto();
-        else generarGabinetes();
+        else {
+            generarGabinetes();
+            refrescarChartsSiEsNecesario();
+        }
     });
 
     db.collection("gabinetes").onSnapshot((snapshot) => {
         inventarioGabinetes = {};
         snapshot.forEach((doc) => { inventarioGabinetes[doc.id] = doc.data(); });
         generarGabinetes();
+        refrescarChartsSiEsNecesario();
     });
 
     db.collection("config_lockers").onSnapshot((snapshot) => {
@@ -263,6 +269,7 @@ function escucharFirestore() {
         } else {
             listaEstructuraLockers.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
             generarTarjetasLockers();
+            refrescarChartsSiEsNecesario();
         }
     });
 
@@ -270,18 +277,21 @@ function escucharFirestore() {
         inventarioLockers = {};
         snapshot.forEach((doc) => { inventarioLockers[doc.id] = doc.data().items || []; });
         generarTarjetasLockers();
+        refrescarChartsSiEsNecesario();
     });
 
     db.collection("config_racks").onSnapshot((snapshot) => {
         listaEstructuraRacks = [];
         snapshot.forEach((doc) => { listaEstructuraRacks.push({ id: doc.id, ...doc.data() }); });
         generarTarjetasRacks();
+        refrescarChartsSiEsNecesario();
     });
 
     db.collection("racks").onSnapshot((snapshot) => {
         inventarioRacks = {};
         snapshot.forEach((doc) => { inventarioRacks[doc.id] = doc.data().items || []; });
         generarTarjetasRacks();
+        refrescarChartsSiEsNecesario();
     });
 
     db.collection("catalogo_nacho").onSnapshot((snapshot) => {
@@ -289,6 +299,7 @@ function escucharFirestore() {
         snapshot.forEach((doc) => { listaNacho.push({ firestoreId: doc.id, ...doc.data() }); });
         renderizarCatalogoNacho();
         actualizarGraficas();
+        refrescarChartsSiEsNecesario();
     });
 
     db.collection("tickets").orderBy("fechaSort", "desc").onSnapshot((snapshot) => {
@@ -1380,6 +1391,7 @@ function openCreateCabinetModal() {
     document.getElementById('gabinete-id-editar').value = '';
     document.getElementById('titulo-modal-gabinete').textContent = 'Create New Cabinet';
     document.getElementById('gabinete-nombre-input').value = '';
+    document.getElementById('gabinete-descripcion-input').value = '';
     document.getElementById('gabinete-tipo-select').value = 'CANTIDAD';
     document.getElementById('gabinete-color-input').value = '#e30613';
     document.getElementById('gabinete-cant-input').value = '30';
@@ -1399,6 +1411,7 @@ function openEditCabinetModal(id) {
     document.getElementById('gabinete-id-editar').value = gab.id;
     document.getElementById('titulo-modal-gabinete').textContent = `Edit Structure of ${gab.nombre}`;
     document.getElementById('gabinete-nombre-input').value = gab.nombre;
+    document.getElementById('gabinete-descripcion-input').value = gab.descripcion || '';
     document.getElementById('gabinete-tipo-select').value = gab.tipo === 'ESPECIAL_G3' ? 'CUSTOM' : gab.tipo;
     document.getElementById('gabinete-color-input').value = gab.color || '#e30613';
     document.getElementById('gabinete-cant-input').value = gab.cant || '30';
@@ -1428,7 +1441,8 @@ async function saveCabinetStructure(event) {
     const docId = idExistente ? idExistente : `G_${Date.now()}`;
     const gabAnterior = idExistente ? listaEstructuraGabinetes.find(g => g.id === idExistente) : null;
 
-    let datosGabinete = { nombre, tipo, color, esEspecial: tipo === 'CUSTOM' };
+    const descripcion = document.getElementById('gabinete-descripcion-input').value.trim();
+    let datosGabinete = { nombre, tipo, color, descripcion, esEspecial: tipo === 'CUSTOM' };
 
     if (tipo === 'GRID') {
         datosGabinete.filas = parseInt(document.getElementById('gabinete-filas-input').value) || 6;
@@ -1608,6 +1622,7 @@ function openCreateLockerModal() {
     document.getElementById('locker-id-editar').value = '';
     document.getElementById('titulo-modal-locker').textContent = 'Create New Locker';
     document.getElementById('locker-nombre-input').value = '';
+    document.getElementById('locker-descripcion-input').value = '';
     document.getElementById('locker-niveles-input').value = '5';
     openModal('modal-nuevo-locker');
 }
@@ -1623,6 +1638,7 @@ function openEditLockerModal(id) {
     document.getElementById('locker-id-editar').value = locker.id;
     document.getElementById('titulo-modal-locker').textContent = `Edit Locker: ${locker.nombre}`;
     document.getElementById('locker-nombre-input').value = locker.nombre;
+    document.getElementById('locker-descripcion-input').value = locker.descripcion || '';
     document.getElementById('locker-niveles-input').value = locker.niveles || 5;
     openModal('modal-nuevo-locker');
 }
@@ -1631,11 +1647,12 @@ async function saveLockerStructure(event) {
     event.preventDefault();
     const idExistente = document.getElementById('locker-id-editar').value;
     const nombre = document.getElementById('locker-nombre-input').value.trim();
+    const descripcion = document.getElementById('locker-descripcion-input').value.trim();
     const niveles = parseInt(document.getElementById('locker-niveles-input').value) || 5;
     const docId = idExistente ? idExistente : `L_${Date.now()}`;
     const lockerAnterior = idExistente ? listaEstructuraLockers.find(l => l.id === idExistente) : null;
 
-    const datosLocker = { nombre, niveles };
+    const datosLocker = { nombre, niveles, descripcion };
 
     await db.collection("config_lockers").doc(docId).set(datosLocker, { merge: true });
 
@@ -2407,6 +2424,7 @@ function openCreateRackModal() {
     document.getElementById('rack-id-editar').value = '';
     document.getElementById('titulo-modal-rack').textContent = 'Create New Rack';
     document.getElementById('rack-nombre-input').value = '';
+    document.getElementById('rack-descripcion-input').value = '';
     document.getElementById('rack-niveles-input').value = '3';
     openModal('modal-nuevo-rack');
 }
@@ -2422,6 +2440,7 @@ function openEditRackModal(id) {
     document.getElementById('rack-id-editar').value = rack.id;
     document.getElementById('titulo-modal-rack').textContent = `Edit Rack: ${rack.nombre}`;
     document.getElementById('rack-nombre-input').value = rack.nombre;
+    document.getElementById('rack-descripcion-input').value = rack.descripcion || '';
     document.getElementById('rack-niveles-input').value = rack.niveles || 3;
     openModal('modal-nuevo-rack');
 }
@@ -2430,11 +2449,12 @@ async function saveRackStructure(event) {
     event.preventDefault();
     const idExistente = document.getElementById('rack-id-editar').value;
     const nombre = document.getElementById('rack-nombre-input').value.trim();
+    const descripcion = document.getElementById('rack-descripcion-input').value.trim();
     const niveles = parseInt(document.getElementById('rack-niveles-input').value) || 3;
     const docId = idExistente ? idExistente : `R_${Date.now()}`;
     const rackAnterior = idExistente ? listaEstructuraRacks.find(r => r.id === idExistente) : null;
 
-    const datosRack = { nombre, niveles };
+    const datosRack = { nombre, niveles, descripcion };
 
     await db.collection("config_racks").doc(docId).set(datosRack, { merge: true });
 
@@ -4417,4 +4437,913 @@ async function saveNewCouponGlobal(event) {
 
     closeModal('modal-coupon-global');
     Toast.fire({ icon: 'success', title: 'Coupon added to global list' });
+}
+
+// =============================================================
+// CHARTS SUB-TABS
+// =============================================================
+function changeChartsSubtab(subtab) {
+    chartsSubtabActual = subtab;
+
+    const subtabs = ['overview', 'cabinets', 'lockers', 'coupons', 'materials'];
+    subtabs.forEach(st => {
+        const btn = document.getElementById(`subtab-btn-${st}`);
+        const cont = document.getElementById(`charts-subtab-${st}`);
+        if (btn) btn.style.background = st === subtab ? '#e30613' : '#343a40';
+        if (cont) cont.style.display = st === subtab ? 'block' : 'none';
+    });
+
+    if (subtab === 'cabinets') {
+        renderizarGraficaCabinets();
+        renderizarDescripcionesGabinetes();
+    } else if (subtab === 'lockers') {
+        renderizarGraficaLockers();
+        renderizarDescripcionesLockers();
+    } else if (subtab === 'coupons') {
+        renderizarGraficaCoupons();
+        renderizarDescripcionesRacks();
+    } else if (subtab === 'materials') {
+        renderizarGraficaMaterials();
+        renderizarDescripcionesMateriales();
+    } else if (subtab === 'overview') {
+        actualizarGraficas();
+    }
+}
+
+// =============================================================
+// CABINETS CHART (Top 10 components by quantity)
+// =============================================================
+function renderizarGraficaCabinets() {
+    const canvas = document.getElementById('chartCabinetsTopComponents');
+    if (!canvas) return;
+
+    // Acumular cantidad total por componente (solo los que tienen nombre real y cantidad > 0)
+    const conteo = {};
+    for (const key in inventarioGabinetes) {
+        const info = inventarioGabinetes[key];
+        if (!info || !info.nombre) continue;
+        const nombre = (info.nombre || '').trim();
+        if (!nombre || nombre === 'Available' || nombre === 'Disponible') continue;
+
+        const cant = parseInt(info.cant) || 0;
+        if (cant <= 0) continue;
+
+        // Excluir si la key no pertenece a un gabinete existente (por seguridad)
+        const gabId = key.split('-')[0];
+        if (!listaEstructuraGabinetes.find(g => g.id === gabId)) continue;
+
+        conteo[nombre] = (conteo[nombre] || 0) + cant;
+    }
+
+    // Ordenar de mayor a menor y tomar top 10
+    const ordenado = Object.entries(conteo).sort((a, b) => b[1] - a[1]);
+    const top10 = ordenado.slice(0, 10);
+
+    const labels = top10.map(e => e[0]);
+    const data = top10.map(e => e[1]);
+
+    if (chartCabinetsTopInstance) chartCabinetsTopInstance.destroy();
+
+    if (labels.length === 0) {
+        chartCabinetsTopInstance = new Chart(canvas, {
+            type: 'bar',
+            data: { labels: ['No components yet'], datasets: [{ data: [0], backgroundColor: '#adb5bd', borderRadius: 4 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+        });
+        return;
+    }
+
+    chartCabinetsTopInstance = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Total quantity',
+                data: data,
+                backgroundColor: '#e30613',
+                borderRadius: 6,
+                barThickness: 'flex',
+                maxBarThickness: 45
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: 'y',
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `Total: ${ctx.parsed.x} pcs`
+                    }
+                }
+            },
+            scales: {
+                x: { beginAtZero: true, ticks: { precision: 0 } },
+                y: { ticks: { font: { size: 12 } } }
+            }
+        }
+    });
+}
+
+// =============================================================
+// CABINET DESCRIPTIONS (per-cabinet detail panel)
+// =============================================================
+function renderizarDescripcionesGabinetes() {
+    const contenedor = document.getElementById('contenedor-descripciones-gabinetes');
+    if (!contenedor) return;
+    contenedor.innerHTML = '';
+
+    if (listaEstructuraGabinetes.length === 0) {
+        contenedor.innerHTML = '<p style="font-size: 13px; color: #6c757d; grid-column: 1/-1; text-align: center; padding: 20px;">No cabinets registered.</p>';
+        return;
+    }
+
+    // Orden alfabético por nombre
+    const gabinetesOrdenados = [...listaEstructuraGabinetes].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+
+    gabinetesOrdenados.forEach(gab => {
+        // Calcular total de cajones del gabinete
+        let totalCajones = 0;
+        if (gab.tipo === 'GRID') {
+            totalCajones = (gab.filas || 6) * (gab.cols || 6);
+        } else if (gab.tipo === 'CANTIDAD') {
+            totalCajones = gab.cant || 30;
+        } else if (gab.tipo === 'CUSTOM' || gab.tipo === 'ESPECIAL_G3') {
+            totalCajones = (gab.colIzqFilas || 3) + ((gab.colCentroCols || 4) * (gab.colCentroFilas || 5)) + (gab.colDerFilas || 3);
+        }
+
+        // Recopilar componentes del gabinete
+        const componentes = {};
+        let ocupados = 0;
+        for (const key in inventarioGabinetes) {
+            if (!key.startsWith(gab.id + '-')) continue;
+            const info = inventarioGabinetes[key];
+            if (!info || !info.nombre) continue;
+            const nombre = (info.nombre || '').trim();
+            if (!nombre || nombre === 'Available' || nombre === 'Disponible') continue;
+
+            const cant = parseInt(info.cant) || 0;
+            ocupados++;
+            componentes[nombre] = (componentes[nombre] || 0) + cant;
+        }
+
+        const componentesOrdenados = Object.entries(componentes).sort((a, b) => b[1] - a[1]);
+        const vacios = Math.max(0, totalCajones - ocupados);
+        const porcentajeOcupacion = totalCajones > 0 ? Math.round((ocupados / totalCajones) * 100) : 0;
+
+        const card = document.createElement('div');
+        card.style.cssText = "background: #ffffff; border: 1px solid #e9ecef; border-left: 5px solid #e30613; border-radius: 10px; padding: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);";
+
+        const descripcionHTML = gab.descripcion
+            ? `<p style="margin: 8px 0 0 0; font-size: 13px; color: #495057; font-style: italic; background: #f8f9fa; padding: 8px 12px; border-radius: 6px; border-left: 3px solid #e30613;">${gab.descripcion}</p>`
+            : `<p style="margin: 8px 0 0 0; font-size: 12px; color: #adb5bd; font-style: italic;">No description yet.</p>`;
+
+        // Barra de progreso de ocupación
+        const barraHTML = `
+            <div style="margin: 12px 0 0 0;">
+                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #6c757d; margin-bottom: 4px;">
+                    <span><strong>${ocupados}</strong> occupied / <strong>${vacios}</strong> empty</span>
+                    <span>${porcentajeOcupacion}%</span>
+                </div>
+                <div style="width: 100%; height: 8px; background: #e9ecef; border-radius: 4px; overflow: hidden;">
+                    <div style="width: ${porcentajeOcupacion}%; height: 100%; background: linear-gradient(90deg, #e30613 0%, #b8030e 100%); border-radius: 4px; transition: width 0.4s ease;"></div>
+                </div>
+            </div>
+        `;
+
+        // Lista de componentes
+        let listaComponentesHTML = '';
+        if (componentesOrdenados.length === 0) {
+            listaComponentesHTML = `<p style="font-size: 12px; color: #adb5bd; margin: 12px 0 0 0; text-align: center; padding: 10px; background: #f8f9fa; border-radius: 6px;">No components registered.</p>`;
+        } else {
+            listaComponentesHTML = `
+                <div style="margin-top: 14px; border-top: 1px dashed #e9ecef; padding-top: 12px;">
+                    <p style="font-size: 12px; font-weight: bold; color: #343a40; margin: 0 0 8px 0;">📋 Components (${componentesOrdenados.length}):</p>
+                    <div style="display: flex; flex-direction: column; gap: 5px; max-height: 220px; overflow-y: auto; padding-right: 5px;">
+                        ${componentesOrdenados.map(([nombre, cant]) => `
+                            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 5px 10px; background: #f8f9fa; border-radius: 5px; border-left: 3px solid #adb5bd;">
+                                <span style="color: #212529; word-break: break-word; padding-right: 8px;">${nombre}</span>
+                                <span style="background: #e30613; color: white; padding: 2px 10px; border-radius: 10px; font-weight: bold; font-size: 11px; white-space: nowrap;">${cant} pcs</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        const tipoLabel = gab.tipo === 'GRID' ? `Grid ${gab.filas || 6}×${gab.cols || 6}` :
+                          gab.tipo === 'CANTIDAD' ? `Consecutive (${gab.cant || 30})` :
+                          'Custom (Left + Center + Right)';
+
+        card.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 4px;">
+                <h4 style="margin: 0; font-size: 15px; color: #1a1d20; font-weight: 700;">🗄️ ${gab.nombre}</h4>
+                <span style="background: #e9ecef; color: #495057; padding: 2px 10px; border-radius: 12px; font-size: 10px; font-weight: bold; white-space: nowrap;">${tipoLabel}</span>
+            </div>
+            <p style="margin: 4px 0 0 0; font-size: 12px; color: #6c757d;">Total drawers: <strong>${totalCajones}</strong></p>
+            ${descripcionHTML}
+            ${barraHTML}
+            ${listaComponentesHTML}
+        `;
+        contenedor.appendChild(card);
+    });
+}
+
+// =============================================================
+// AUTO-REFRESH CABINETS CHART ON DATA CHANGE
+// =============================================================
+function refrescarChartsSiEsNecesario() {
+    if (chartsSubtabActual === 'cabinets') {
+        renderizarGraficaCabinets();
+        renderizarDescripcionesGabinetes();
+    } else if (chartsSubtabActual === 'lockers') {
+        renderizarGraficaLockers();
+        renderizarDescripcionesLockers();
+    } else if (chartsSubtabActual === 'coupons') {
+        renderizarGraficaCoupons();
+        renderizarDescripcionesRacks();
+    } else if (chartsSubtabActual === 'materials') {
+        renderizarGraficaMaterials();
+        renderizarDescripcionesMateriales();
+    }
+}
+
+// =============================================================
+// LOCKERS CHART (Stacked bars by status)
+// =============================================================
+let chartLockersInstance = null;
+
+function renderizarGraficaLockers() {
+    const canvas = document.getElementById('chartLockersFixtures');
+    if (!canvas) return;
+
+    // Ordenar lockers alfabéticamente
+    const lockersOrdenados = [...listaEstructuraLockers].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+
+    const labels = [];
+    // dataPorEstado[estado][idx] = cantidad
+    const estadosKeys = Object.keys(ESTADOS_DISPONIBLES);
+    const dataPorEstado = {};
+    estadosKeys.forEach(k => dataPorEstado[k] = []);
+
+    lockersOrdenados.forEach(locker => {
+        labels.push(locker.nombre);
+
+        const conteoEstados = {};
+        estadosKeys.forEach(k => conteoEstados[k] = 0);
+
+        for (let d = 1; d <= locker.niveles; d++) {
+            const key = `${locker.id}-${d}`;
+            const piezas = inventarioLockers[key] || [];
+            piezas.forEach(p => {
+                const est = p.estado && ESTADOS_DISPONIBLES[p.estado] ? p.estado : 'Available';
+                conteoEstados[est]++;
+            });
+        }
+
+        estadosKeys.forEach(k => dataPorEstado[k].push(conteoEstados[k]));
+    });
+
+    if (chartLockersInstance) chartLockersInstance.destroy();
+
+    if (labels.length === 0) {
+        chartLockersInstance = new Chart(canvas, {
+            type: 'bar',
+            data: { labels: ['No lockers yet'], datasets: [{ data: [0], backgroundColor: '#adb5bd' }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+        });
+        return;
+    }
+
+    // Construir datasets solo con los estados que tienen al menos 1 valor > 0
+    const datasets = [];
+    estadosKeys.forEach(k => {
+        const info = ESTADOS_DISPONIBLES[k];
+        if (dataPorEstado[k].some(v => v > 0)) {
+            datasets.push({
+                label: `${info.emoji} ${info.label}`,
+                data: dataPorEstado[k],
+                backgroundColor: info.color,
+                borderRadius: 3,
+                maxBarThickness: 60
+            });
+        }
+    });
+
+    chartLockersInstance = new Chart(canvas, {
+        type: 'bar',
+        data: { labels, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    callbacks: {
+                        footer: (items) => {
+                            const total = items.reduce((sum, it) => sum + (it.parsed.y || 0), 0);
+                            return `Total: ${total} fixture(s)`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { stacked: true, ticks: { font: { size: 12 } } },
+                y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } }
+            }
+        }
+    });
+
+    // Leyenda manual
+    const leyenda = document.getElementById('leyenda-estados-lockers');
+    if (leyenda) {
+        leyenda.innerHTML = '';
+        estadosKeys.forEach(k => {
+            const info = ESTADOS_DISPONIBLES[k];
+            const item = document.createElement('div');
+            item.style.cssText = "display: flex; align-items: center; gap: 6px; font-size: 12px; color: #495057;";
+            item.innerHTML = `
+                <span style="display: inline-block; width: 14px; height: 14px; background: ${info.color}; border-radius: 3px;"></span>
+                <span>${info.emoji} ${info.label}</span>
+            `;
+            leyenda.appendChild(item);
+        });
+    }
+}
+
+// =============================================================
+// LOCKER DESCRIPTIONS (per-locker detail panel)
+// =============================================================
+function calcularCantidadFixture(p) {
+    // Si tiene posiciones con cantidad > 0, sumar
+    if (p.posiciones && p.posiciones.length > 0) {
+        const suma = p.posiciones.reduce((s, pos) => s + (parseInt(pos.cantidad) || 0), 0);
+        if (suma > 0) return suma;
+    }
+    // Si tiene cantidad simple
+    if (p.cantidad !== undefined && p.cantidad !== '' && p.cantidad !== null) {
+        const c = parseInt(p.cantidad);
+        if (!isNaN(c) && c > 0) return c;
+    }
+    // Si no, no mostrar
+    return null;
+}
+
+function renderizarDescripcionesLockers() {
+    const contenedor = document.getElementById('contenedor-descripciones-lockers');
+    if (!contenedor) return;
+    contenedor.innerHTML = '';
+
+    if (listaEstructuraLockers.length === 0) {
+        contenedor.innerHTML = '<p style="font-size: 13px; color: #6c757d; grid-column: 1/-1; text-align: center; padding: 20px;">No lockers registered.</p>';
+        return;
+    }
+
+    const lockersOrdenados = [...listaEstructuraLockers].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+
+    lockersOrdenados.forEach(locker => {
+        // Recopilar todos los fixtures del locker
+        const fixtures = [];
+        let compartimentosConItems = 0;
+
+        for (let d = 1; d <= locker.niveles; d++) {
+            const key = `${locker.id}-${d}`;
+            const piezas = inventarioLockers[key] || [];
+            if (piezas.length > 0) compartimentosConItems++;
+
+            const nombreNivel = (locker.nombresNiveles && locker.nombresNiveles[d]) ? locker.nombresNiveles[d] : `Compartment ${d}`;
+
+            piezas.forEach(p => {
+                fixtures.push({ ...p, _compartimento: d, _compartimentoNombre: nombreNivel });
+            });
+        }
+
+        const totalCompartimentos = locker.niveles;
+        const totalFixtures = fixtures.length;
+        const porcentajeOcupacion = totalCompartimentos > 0 ? Math.round((compartimentosConItems / totalCompartimentos) * 100) : 0;
+
+        // Agrupar por cliente
+        const porCliente = {};
+        fixtures.forEach(p => {
+            const cli = p.cliente || 'No Client';
+            porCliente[cli] = (porCliente[cli] || 0) + 1;
+        });
+        const clientesOrdenados = Object.entries(porCliente).sort((a, b) => b[1] - a[1]);
+
+        // Contar por estado
+        const porEstado = {};
+        Object.keys(ESTADOS_DISPONIBLES).forEach(k => porEstado[k] = 0);
+        fixtures.forEach(p => {
+            const est = p.estado && ESTADOS_DISPONIBLES[p.estado] ? p.estado : 'Available';
+            porEstado[est]++;
+        });
+
+        const card = document.createElement('div');
+        card.style.cssText = "background: #ffffff; border: 1px solid #e9ecef; border-left: 5px solid #e30613; border-radius: 10px; padding: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);";
+
+        const descripcionHTML = locker.descripcion
+            ? `<p style="margin: 8px 0 0 0; font-size: 13px; color: #495057; font-style: italic; background: #f8f9fa; padding: 8px 12px; border-radius: 6px; border-left: 3px solid #e30613;">${locker.descripcion}</p>`
+            : `<p style="margin: 8px 0 0 0; font-size: 12px; color: #adb5bd; font-style: italic;">No description yet.</p>`;
+
+        const barraHTML = `
+            <div style="margin: 12px 0 0 0;">
+                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #6c757d; margin-bottom: 4px;">
+                    <span><strong>${compartimentosConItems}</strong> of <strong>${totalCompartimentos}</strong> compartments used</span>
+                    <span>${porcentajeOcupacion}%</span>
+                </div>
+                <div style="width: 100%; height: 8px; background: #e9ecef; border-radius: 4px; overflow: hidden;">
+                    <div style="width: ${porcentajeOcupacion}%; height: 100%; background: linear-gradient(90deg, #e30613 0%, #b8030e 100%); border-radius: 4px; transition: width 0.4s ease;"></div>
+                </div>
+            </div>
+        `;
+
+        // Badges por estado
+        let badgesEstadoHTML = '';
+        const estadosConValor = Object.keys(ESTADOS_DISPONIBLES).filter(k => porEstado[k] > 0);
+        if (estadosConValor.length > 0) {
+            badgesEstadoHTML = `<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px;">` +
+                estadosConValor.map(k => {
+                    const info = ESTADOS_DISPONIBLES[k];
+                    return `<span style="background: ${info.color}; color: white; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: bold;">${info.emoji} ${info.label}: ${porEstado[k]}</span>`;
+                }).join('') +
+            `</div>`;
+        }
+
+        // Clientes
+        let clientesHTML = '';
+        if (clientesOrdenados.length > 0) {
+            clientesHTML = `
+                <div style="margin-top: 12px; border-top: 1px dashed #e9ecef; padding-top: 10px;">
+                    <p style="font-size: 12px; font-weight: bold; color: #343a40; margin: 0 0 6px 0;">🏢 Clients (${clientesOrdenados.length}):</p>
+                    <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+                        ${clientesOrdenados.map(([cli, cnt]) => `<span style="background: #e7f5ff; color: #1971c2; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: bold; border: 1px solid #a5d8ff;">${cli}: ${cnt}</span>`).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Lista de fixtures
+        let listaFixturesHTML = '';
+        if (fixtures.length === 0) {
+            listaFixturesHTML = `<p style="font-size: 12px; color: #adb5bd; margin: 12px 0 0 0; text-align: center; padding: 10px; background: #f8f9fa; border-radius: 6px;">No fixtures stored in this locker.</p>`;
+        } else {
+            const fixturesOrdenados = [...fixtures].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+
+            listaFixturesHTML = `
+                <div style="margin-top: 14px; border-top: 1px dashed #e9ecef; padding-top: 12px;">
+                    <p style="font-size: 12px; font-weight: bold; color: #343a40; margin: 0 0 8px 0;">📦 All fixtures stored (${fixtures.length}):</p>
+                    <div style="display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; padding-right: 5px;">
+                        ${fixturesOrdenados.map((f, idx) => {
+                            const cant = calcularCantidadFixture(f);
+                            const cantHTML = cant !== null ? `<span style="background: #862e9c; color: white; padding: 2px 8px; border-radius: 10px; font-weight: bold; font-size: 10px; white-space: nowrap;">${cant} pcs</span>` : '';
+                            const estadoInfo = ESTADOS_DISPONIBLES[f.estado] || ESTADOS_DISPONIBLES['Available'];
+                            const codigoHTML = f.codigoInterno ? `<span style="font-family: monospace; font-size: 10px; color: #862e9c; background: #f3e8ff; padding: 1px 6px; border-radius: 3px; display: inline-block; margin-top: 3px;">🔢 ${f.codigoInterno}</span>` : '';
+                            const fixtureJSON = JSON.stringify(f).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
+
+                            return `
+                                <div style="background: #f8f9fa; border-radius: 6px; padding: 8px 10px; border-left: 3px solid ${estadoInfo.color};">
+                                    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+                                        <div style="flex: 1; min-width: 0;">
+                                            <div style="font-size: 12px; color: #212529; font-weight: 600; word-break: break-word;">${f.nombre}</div>
+                                            <div style="font-size: 11px; color: #6c757d; margin-top: 2px;">🏢 ${f.cliente || 'N/A'} · 📁 ${f._compartimentoNombre}</div>
+                                            ${codigoHTML}
+                                        </div>
+                                        <div style="display: flex; flex-direction: column; gap: 4px; align-items: flex-end;">
+                                            ${cantHTML}
+                                            <button style="background: none; border: none; color: #e30613; font-size: 10px; font-weight: bold; padding: 0; cursor: pointer; text-decoration: underline;" onclick='viewFullFixtureDetail(${fixtureJSON})'>Ver más</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        card.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 4px;">
+                <h4 style="margin: 0; font-size: 15px; color: #1a1d20; font-weight: 700;">🔒 ${locker.nombre}</h4>
+                <span style="background: #e9ecef; color: #495057; padding: 2px 10px; border-radius: 12px; font-size: 10px; font-weight: bold; white-space: nowrap;">${totalFixtures} fixture(s)</span>
+            </div>
+            <p style="margin: 4px 0 0 0; font-size: 12px; color: #6c757d;">Compartments: <strong>${totalCompartimentos}</strong></p>
+            ${descripcionHTML}
+            ${barraHTML}
+            ${badgesEstadoHTML}
+            ${clientesHTML}
+            ${listaFixturesHTML}
+        `;
+        contenedor.appendChild(card);
+    });
+}
+
+// =============================================================
+// COUPONS CHART (Stacked bars by status)
+// =============================================================
+let chartCouponsInstance = null;
+
+function renderizarGraficaCoupons() {
+    const canvas = document.getElementById('chartCouponsRacks');
+    if (!canvas) return;
+
+    const racksOrdenados = [...listaEstructuraRacks].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+
+    const labels = [];
+    const estadosKeys = Object.keys(ESTADOS_DISPONIBLES);
+    const dataPorEstado = {};
+    estadosKeys.forEach(k => dataPorEstado[k] = []);
+
+    racksOrdenados.forEach(rack => {
+        labels.push(rack.nombre);
+
+        const conteoEstados = {};
+        estadosKeys.forEach(k => conteoEstados[k] = 0);
+
+        for (let d = 1; d <= rack.niveles; d++) {
+            const key = `${rack.id}-${d}`;
+            const piezas = inventarioRacks[key] || [];
+            piezas.forEach(p => {
+                const est = p.estado && ESTADOS_DISPONIBLES[p.estado] ? p.estado : 'Available';
+                conteoEstados[est]++;
+            });
+        }
+
+        estadosKeys.forEach(k => dataPorEstado[k].push(conteoEstados[k]));
+    });
+
+    if (chartCouponsInstance) chartCouponsInstance.destroy();
+
+    if (labels.length === 0) {
+        chartCouponsInstance = new Chart(canvas, {
+            type: 'bar',
+            data: { labels: ['No racks yet'], datasets: [{ data: [0], backgroundColor: '#adb5bd' }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+        });
+        return;
+    }
+
+    const datasets = [];
+    estadosKeys.forEach(k => {
+        const info = ESTADOS_DISPONIBLES[k];
+        if (dataPorEstado[k].some(v => v > 0)) {
+            datasets.push({
+                label: `${info.emoji} ${info.label}`,
+                data: dataPorEstado[k],
+                backgroundColor: info.color,
+                borderRadius: 3,
+                maxBarThickness: 60
+            });
+        }
+    });
+
+    chartCouponsInstance = new Chart(canvas, {
+        type: 'bar',
+        data: { labels, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    callbacks: {
+                        footer: (items) => {
+                            const total = items.reduce((sum, it) => sum + (it.parsed.y || 0), 0);
+                            return `Total: ${total} coupon(s)`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { stacked: true, ticks: { font: { size: 12 } } },
+                y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } }
+            }
+        }
+    });
+
+    const leyenda = document.getElementById('leyenda-estados-coupons');
+    if (leyenda) {
+        leyenda.innerHTML = '';
+        estadosKeys.forEach(k => {
+            const info = ESTADOS_DISPONIBLES[k];
+            const item = document.createElement('div');
+            item.style.cssText = "display: flex; align-items: center; gap: 6px; font-size: 12px; color: #495057;";
+            item.innerHTML = `
+                <span style="display: inline-block; width: 14px; height: 14px; background: ${info.color}; border-radius: 3px;"></span>
+                <span>${info.emoji} ${info.label}</span>
+            `;
+            leyenda.appendChild(item);
+        });
+    }
+}
+
+// =============================================================
+// RACK DESCRIPTIONS (per-rack detail panel)
+// =============================================================
+function renderizarDescripcionesRacks() {
+    const contenedor = document.getElementById('contenedor-descripciones-racks');
+    if (!contenedor) return;
+    contenedor.innerHTML = '';
+
+    if (listaEstructuraRacks.length === 0) {
+        contenedor.innerHTML = '<p style="font-size: 13px; color: #6c757d; grid-column: 1/-1; text-align: center; padding: 20px;">No racks registered.</p>';
+        return;
+    }
+
+    const racksOrdenados = [...listaEstructuraRacks].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+
+    racksOrdenados.forEach(rack => {
+        const coupons = [];
+        let nivelesConItems = 0;
+
+        for (let d = 1; d <= rack.niveles; d++) {
+            const key = `${rack.id}-${d}`;
+            const piezas = inventarioRacks[key] || [];
+            if (piezas.length > 0) nivelesConItems++;
+
+            const nombreNivel = (rack.nombresNiveles && rack.nombresNiveles[d]) ? rack.nombresNiveles[d] : `Level ${d}`;
+
+            piezas.forEach(p => {
+                coupons.push({ ...p, _nivel: d, _nivelNombre: nombreNivel });
+            });
+        }
+
+        const totalNiveles = rack.niveles;
+        const totalCoupons = coupons.length;
+        const porcentajeOcupacion = totalNiveles > 0 ? Math.round((nivelesConItems / totalNiveles) * 100) : 0;
+
+        // Agrupar por cliente
+        const porCliente = {};
+        coupons.forEach(p => {
+            const cli = p.cliente || 'No Client';
+            porCliente[cli] = (porCliente[cli] || 0) + 1;
+        });
+        const clientesOrdenados = Object.entries(porCliente).sort((a, b) => b[1] - a[1]);
+
+        // Agrupar por año
+        const porYear = {};
+        coupons.forEach(p => {
+            if (p.year) porYear[p.year] = (porYear[p.year] || 0) + 1;
+        });
+        const yearsOrdenados = Object.entries(porYear).sort((a, b) => b[0] - a[0]);
+
+        // Contar por estado
+        const porEstado = {};
+        Object.keys(ESTADOS_DISPONIBLES).forEach(k => porEstado[k] = 0);
+        coupons.forEach(p => {
+            const est = p.estado && ESTADOS_DISPONIBLES[p.estado] ? p.estado : 'Available';
+            porEstado[est]++;
+        });
+
+        const card = document.createElement('div');
+        card.style.cssText = "background: #ffffff; border: 1px solid #e9ecef; border-left: 5px solid #862e9c; border-radius: 10px; padding: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);";
+
+        const descripcionHTML = rack.descripcion
+            ? `<p style="margin: 8px 0 0 0; font-size: 13px; color: #495057; font-style: italic; background: #f8f9fa; padding: 8px 12px; border-radius: 6px; border-left: 3px solid #862e9c;">${rack.descripcion}</p>`
+            : `<p style="margin: 8px 0 0 0; font-size: 12px; color: #adb5bd; font-style: italic;">No description yet.</p>`;
+
+        const barraHTML = `
+            <div style="margin: 12px 0 0 0;">
+                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #6c757d; margin-bottom: 4px;">
+                    <span><strong>${nivelesConItems}</strong> of <strong>${totalNiveles}</strong> levels used</span>
+                    <span>${porcentajeOcupacion}%</span>
+                </div>
+                <div style="width: 100%; height: 8px; background: #e9ecef; border-radius: 4px; overflow: hidden;">
+                    <div style="width: ${porcentajeOcupacion}%; height: 100%; background: linear-gradient(90deg, #862e9c 0%, #5f2170 100%); border-radius: 4px; transition: width 0.4s ease;"></div>
+                </div>
+            </div>
+        `;
+
+        // Badges por estado
+        let badgesEstadoHTML = '';
+        const estadosConValor = Object.keys(ESTADOS_DISPONIBLES).filter(k => porEstado[k] > 0);
+        if (estadosConValor.length > 0) {
+            badgesEstadoHTML = `<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px;">` +
+                estadosConValor.map(k => {
+                    const info = ESTADOS_DISPONIBLES[k];
+                    return `<span style="background: ${info.color}; color: white; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: bold;">${info.emoji} ${info.label}: ${porEstado[k]}</span>`;
+                }).join('') +
+            `</div>`;
+        }
+
+        // Clientes + Years en una fila
+        let metaHTML = '';
+        if (clientesOrdenados.length > 0 || yearsOrdenados.length > 0) {
+            metaHTML = `<div style="margin-top: 12px; border-top: 1px dashed #e9ecef; padding-top: 10px; display: flex; flex-direction: column; gap: 8px;">`;
+            if (clientesOrdenados.length > 0) {
+                metaHTML += `
+                    <div>
+                        <p style="font-size: 12px; font-weight: bold; color: #343a40; margin: 0 0 6px 0;">🏢 Clients (${clientesOrdenados.length}):</p>
+                        <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+                            ${clientesOrdenados.map(([cli, cnt]) => `<span style="background: #e7f5ff; color: #1971c2; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: bold; border: 1px solid #a5d8ff;">${cli}: ${cnt}</span>`).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            if (yearsOrdenados.length > 0) {
+                metaHTML += `
+                    <div>
+                        <p style="font-size: 12px; font-weight: bold; color: #343a40; margin: 0 0 6px 0;">📅 Years (${yearsOrdenados.length}):</p>
+                        <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+                            ${yearsOrdenados.map(([year, cnt]) => `<span style="background: #f3e8ff; color: #862e9c; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: bold; border: 1px solid #d0bfff;">${year}: ${cnt}</span>`).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            metaHTML += `</div>`;
+        }
+
+        // Lista de coupons
+        let listaCouponsHTML = '';
+        if (coupons.length === 0) {
+            listaCouponsHTML = `<p style="font-size: 12px; color: #adb5bd; margin: 12px 0 0 0; text-align: center; padding: 10px; background: #f8f9fa; border-radius: 6px;">No coupons stored in this rack.</p>`;
+        } else {
+            const couponsOrdenados = [...coupons].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+
+            listaCouponsHTML = `
+                <div style="margin-top: 14px; border-top: 1px dashed #e9ecef; padding-top: 12px;">
+                    <p style="font-size: 12px; font-weight: bold; color: #343a40; margin: 0 0 8px 0;">📦 All coupons stored (${coupons.length}):</p>
+                    <div style="display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; padding-right: 5px;">
+                        ${couponsOrdenados.map((c) => {
+                            const estadoInfo = ESTADOS_DISPONIBLES[c.estado] || ESTADOS_DISPONIBLES['Available'];
+                            const fixtureJSON = JSON.stringify(c).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
+
+                            // Cantidad total (suma de posiciones)
+                            let cantidadTotal = 0;
+                            if (c.posiciones && c.posiciones.length > 0) {
+                                cantidadTotal = c.posiciones.reduce((s, p) => s + (parseInt(p.cantidad) || 0), 0);
+                            }
+                            const cantidadHTML = cantidadTotal > 0 ? `<span style="background: #862e9c; color: white; padding: 2px 8px; border-radius: 10px; font-weight: bold; font-size: 10px; white-space: nowrap;">${cantidadTotal} pcs</span>` : '';
+
+                            // Códigos internos
+                            let codigosHTML = '';
+                            if (c.codigosInternos && c.codigosInternos.length > 0) {
+                                codigosHTML = '<div style="display: flex; flex-direction: column; gap: 3px; margin-top: 5px;">' +
+                                    c.codigosInternos.map(cod => `<span style="font-family: monospace; font-size: 10px; color: #862e9c; font-weight: bold; background: #f3e8ff; padding: 2px 6px; border-radius: 3px; display: inline-block; width: fit-content;">🔢 ${cod.codigo}</span>`).join('') +
+                                '</div>';
+                            }
+
+                            // Posiciones (chips)
+                            let posicionesHTML = '';
+                            if (c.posiciones && c.posiciones.length > 0) {
+                                posicionesHTML = '<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px;">' +
+                                    c.posiciones.map(pos => `<span style="background: #862e9c; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: bold;">${pos.abreviatura}: ${pos.cantidad}</span>`).join('') +
+                                '</div>';
+                            }
+
+                            return `
+                                <div style="background: #f8f9fa; border-radius: 6px; padding: 10px; border-left: 3px solid ${estadoInfo.color};">
+                                    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+                                        <div style="flex: 1; min-width: 0;">
+                                            <div style="font-size: 12px; color: #212529; font-weight: 600; word-break: break-word;">${c.nombre}</div>
+                                            <div style="font-size: 11px; color: #6c757d; margin-top: 2px;">🏢 ${c.cliente || 'N/A'} · 📁 ${c._nivelNombre}${c.year ? ` · 📅 ${c.year}` : ''}</div>
+                                            ${codigosHTML}
+                                            ${posicionesHTML}
+                                        </div>
+                                        <div style="display: flex; flex-direction: column; gap: 4px; align-items: flex-end;">
+                                            ${cantidadHTML}
+                                            <button style="background: none; border: none; color: #e30613; font-size: 10px; font-weight: bold; padding: 0; cursor: pointer; text-decoration: underline;" onclick='viewFullFixtureDetail(${fixtureJSON})'>Ver más</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        card.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 4px;">
+                <h4 style="margin: 0; font-size: 15px; color: #1a1d20; font-weight: 700;">📐 ${rack.nombre}</h4>
+                <span style="background: #f3e8ff; color: #862e9c; padding: 2px 10px; border-radius: 12px; font-size: 10px; font-weight: bold; white-space: nowrap;">${totalCoupons} coupon(s)</span>
+            </div>
+            <p style="margin: 4px 0 0 0; font-size: 12px; color: #6c757d;">Levels: <strong>${totalNiveles}</strong></p>
+            ${descripcionHTML}
+            ${barraHTML}
+            ${badgesEstadoHTML}
+            ${metaHTML}
+            ${listaCouponsHTML}
+        `;
+        contenedor.appendChild(card);
+    });
+}
+
+// =============================================================
+// MATERIALS CHART (Stock by material with threshold colors)
+// =============================================================
+let chartMaterialsStockInstance = null;
+
+function renderizarGraficaMaterials() {
+    const canvas = document.getElementById('chartMaterialsStock');
+    if (!canvas) return;
+
+    // Ordenar materiales por stock descendente
+    const materialesOrdenados = [...listaNacho].sort((a, b) => (parseInt(b.cant) || 0) - (parseInt(a.cant) || 0));
+
+    const labels = materialesOrdenados.map(m => m.nombre);
+    const data = materialesOrdenados.map(m => parseInt(m.cant) || 0);
+
+    // Color por umbral
+    const colores = data.map(cant => {
+        if (cant <= 0) return '#e30613';
+        if (cant <= 10) return '#f59f00';
+        return '#2b8a3e';
+    });
+
+    if (chartMaterialsStockInstance) chartMaterialsStockInstance.destroy();
+
+    if (labels.length === 0) {
+        chartMaterialsStockInstance = new Chart(canvas, {
+            type: 'bar',
+            data: { labels: ['No materials yet'], datasets: [{ data: [0], backgroundColor: '#adb5bd' }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+        });
+        return;
+    }
+
+    chartMaterialsStockInstance = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Stock (pcs)',
+                data: data,
+                backgroundColor: colores,
+                borderRadius: 6,
+                maxBarThickness: 40
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: 'y',
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `Stock: ${ctx.parsed.x} pcs`,
+                        afterLabel: (ctx) => {
+                            const mat = materialesOrdenados[ctx.dataIndex];
+                            return mat.ubicacion ? `📍 ${mat.ubicacion}` : '';
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { beginAtZero: true, ticks: { precision: 0 } },
+                y: { ticks: { font: { size: 12 } } }
+            }
+        }
+    });
+}
+
+// =============================================================
+// MATERIAL DESCRIPTIONS (per-material detail panel)
+// =============================================================
+function renderizarDescripcionesMateriales() {
+    const contenedor = document.getElementById('contenedor-descripciones-materiales');
+    if (!contenedor) return;
+    contenedor.innerHTML = '';
+
+    if (listaNacho.length === 0) {
+        contenedor.innerHTML = '<p style="font-size: 13px; color: #6c757d; grid-column: 1/-1; text-align: center; padding: 20px;">No materials registered.</p>';
+        return;
+    }
+
+    // Ordenar por stock descendente, mismo orden que la gráfica
+    const materialesOrdenados = [...listaNacho].sort((a, b) => (parseInt(b.cant) || 0) - (parseInt(a.cant) || 0));
+
+    materialesOrdenados.forEach(mat => {
+        const cant = parseInt(mat.cant) || 0;
+        let color, label, emoji;
+        if (cant <= 0) {
+            color = '#e30613'; label = 'Out of Stock'; emoji = '🔴';
+        } else if (cant <= 10) {
+            color = '#f59f00'; label = 'Low Stock'; emoji = '🟡';
+        } else {
+            color = '#2b8a3e'; label = 'In Stock'; emoji = '🟢';
+        }
+
+        const card = document.createElement('div');
+        card.style.cssText = `background: #ffffff; border: 1px solid #e9ecef; border-left: 5px solid ${color}; border-radius: 10px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);`;
+
+        card.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px;">
+                <h4 style="margin: 0; font-size: 15px; color: #1a1d20; font-weight: 700; word-break: break-word;">🧰 ${mat.nombre}</h4>
+                <span style="background: ${color}; color: white; padding: 2px 10px; border-radius: 12px; font-size: 10px; font-weight: bold; white-space: nowrap;">${emoji} ${label}</span>
+            </div>
+            ${mat.desc ? `<p style="margin: 4px 0 0 0; font-size: 12px; color: #495057;">${mat.desc}</p>` : ''}
+            ${mat.ubicacion ? `<p style="margin: 8px 0 0 0; font-size: 11px; color: #1971c2; background: #e7f5ff; padding: 5px 10px; border-radius: 5px; display: inline-block;">📍 ${mat.ubicacion}</p>` : ''}
+            <div style="margin-top: 12px; padding-top: 10px; border-top: 1px dashed #e9ecef; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 11px; color: #6c757d;">Available stock:</span>
+                <span style="font-size: 16px; font-weight: bold; color: ${color};">${cant} pcs</span>
+            </div>
+        `;
+        contenedor.appendChild(card);
+    });
 }

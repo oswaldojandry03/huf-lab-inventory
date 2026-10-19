@@ -204,38 +204,128 @@
                     <p style="font-size: 13px; color: #6c757d;">Visualization of most searched components by cabinet and most requested materials.</p>
                 </div>
 
-                <div class="grid-graficas">
-                    <div class="card-grafica">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px;">
-                            <h3 style="margin: 0; border: none; padding: 0;">Most Searched Screws &amp; Components (Cabinets)</h3>
-                            <button class="btn-huf-secundario" style="font-size: 11px; padding: 5px 10px;" onclick="clearChartData('cabinets')">Clear Data</button>
+                <!-- SUB-TABS -->
+                <div style="display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; border-bottom: 2px solid #e9ecef; padding-bottom: 0;">
+                    <button id="subtab-btn-overview" class="btn-huf-secundario" style="background: #e30613; border-radius: 6px 6px 0 0;" onclick="changeChartsSubtab('overview')">📊 Overview</button>
+                    <button id="subtab-btn-cabinets" class="btn-huf-secundario" style="background: #343a40; border-radius: 6px 6px 0 0;" onclick="changeChartsSubtab('cabinets')">🗄️ Cabinets</button>
+                    <button id="subtab-btn-lockers" class="btn-huf-secundario" style="background: #343a40; border-radius: 6px 6px 0 0;" onclick="changeChartsSubtab('lockers')">🔒 Lockers</button>
+                    <button id="subtab-btn-coupons" class="btn-huf-secundario" style="background: #343a40; border-radius: 6px 6px 0 0;" onclick="changeChartsSubtab('coupons')">📐 Coupons</button>
+                    <button id="subtab-btn-materials" class="btn-huf-secundario" style="background: #343a40; border-radius: 6px 6px 0 0;" onclick="changeChartsSubtab('materials')">🧰 Materials</button>
+                </div>
+
+                <!-- SUBTAB: OVERVIEW -->
+                <div id="charts-subtab-overview">
+                    <div class="grid-graficas">
+                        <div class="card-grafica">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px;">
+                                <h3 style="margin: 0; border: none; padding: 0;">Most Searched Screws &amp; Components (Cabinets)</h3>
+                                <button class="btn-huf-secundario" style="font-size: 11px; padding: 5px 10px;" onclick="clearChartData('cabinets')">Clear Data</button>
+                            </div>
+                            <div class="chart-container">
+                                <canvas id="chartBusquedasGabinetes"></canvas>
+                            </div>
                         </div>
-                        <div class="chart-container">
-                            <canvas id="chartBusquedasGabinetes"></canvas>
+
+                        <div class="card-grafica">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px;">
+                                <h3 style="margin: 0; border: none; padding: 0;">Most Requested Materials (Tooling)</h3>
+                                <button class="btn-huf-secundario" style="font-size: 11px; padding: 5px 10px;" onclick="clearChartData('materials')">Clear Data</button>
+                            </div>
+                            <div class="chart-container">
+                                <canvas id="chartMaterialesSolicitados"></canvas>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="card-grafica">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px;">
-                            <h3 style="margin: 0; border: none; padding: 0;">Most Requested Materials (Tooling)</h3>
-                            <button class="btn-huf-secundario" style="font-size: 11px; padding: 5px 10px;" onclick="clearChartData('materials')">Clear Data</button>
-                        </div>
-                        <div class="chart-container">
-                            <canvas id="chartMaterialesSolicitados"></canvas>
-                        </div>
+                    <div class="panel-clientes-huf" style="margin-top: 25px;">
+                        <details class="desplegable-huf" open>
+                            <summary class="summary-huf">Chart History</summary>
+                            <div style="margin: 15px 0 10px 0; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px;">
+                                <span style="font-size: 13px; font-weight: bold; color: #495057;">Saved Records and Dates</span>
+                            </div>
+                            <div id="lista-historial-graficas" style="display: flex; flex-direction: column; gap: 10px;">
+                                <p style="font-size: 13px; color: #6c757d;">No history records yet.</p>
+                            </div>
+                        </details>
                     </div>
                 </div>
 
-                <div class="panel-clientes-huf" style="margin-top: 25px;">
-                    <details class="desplegable-huf" open>
-                        <summary class="summary-huf">Chart History</summary>
-                        <div style="margin: 15px 0 10px 0; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px;">
-                            <span style="font-size: 13px; font-weight: bold; color: #495057;">Saved Records and Dates</span>
+                <!-- SUBTAB: CABINETS -->
+                <div id="charts-subtab-cabinets" style="display: none;">
+                    <div class="card-grafica">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px; flex-wrap: wrap; gap: 10px;">
+                            <h3 style="margin: 0; border: none; padding: 0;">🔝 Top 10 Components by Quantity (All Cabinets)</h3>
+                            <span style="font-size: 11px; color: #6c757d; background: #f8f9fa; padding: 4px 10px; border-radius: 12px;">Showing top 10</span>
                         </div>
-                        <div id="lista-historial-graficas" style="display: flex; flex-direction: column; gap: 10px;">
-                            <p style="font-size: 13px; color: #6c757d;">No history records yet.</p>
+                        <div class="chart-container">
+                            <canvas id="chartCabinetsTopComponents"></canvas>
                         </div>
-                    </details>
+                    </div>
+
+                    <div style="margin-top: 30px;">
+                        <h3 style="color: #343a40; font-size: 16px; margin-bottom: 15px; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px;">📦 Cabinet Details</h3>
+                        <div id="contenedor-descripciones-gabinetes" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 18px;"></div>
+                    </div>
+                </div>
+                    
+                <!-- SUBTAB: LOCKERS -->
+                <div id="charts-subtab-lockers" style="display: none;">
+                    <div class="card-grafica">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px; flex-wrap: wrap; gap: 10px;">
+                            <h3 style="margin: 0; border: none; padding: 0;">🔒 Fixtures per Locker (by Status)</h3>
+                            <span style="font-size: 11px; color: #6c757d; background: #f8f9fa; padding: 4px 10px; border-radius: 12px;">Stacked by status</span>
+                        </div>
+                        <div class="chart-container" style="height: 380px;">
+                            <canvas id="chartLockersFixtures"></canvas>
+                        </div>
+                        <div id="leyenda-estados-lockers" style="display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 15px; padding-top: 12px; border-top: 1px solid #f1f3f5;"></div>
+                    </div>
+
+                    <div style="margin-top: 30px;">
+                        <h3 style="color: #343a40; font-size: 16px; margin-bottom: 15px; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px;">🔒 Locker Details</h3>
+                        <div id="contenedor-descripciones-lockers" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 18px;"></div>
+                    </div>
+                </div>
+
+                <!-- SUBTAB: COUPONS -->
+                <div id="charts-subtab-coupons" style="display: none;">
+                    <div class="card-grafica">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px; flex-wrap: wrap; gap: 10px;">
+                            <h3 style="margin: 0; border: none; padding: 0;">📐 Coupons per Rack (by Status)</h3>
+                            <span style="font-size: 11px; color: #6c757d; background: #f8f9fa; padding: 4px 10px; border-radius: 12px;">Stacked by status</span>
+                        </div>
+                        <div class="chart-container" style="height: 380px;">
+                            <canvas id="chartCouponsRacks"></canvas>
+                        </div>
+                        <div id="leyenda-estados-coupons" style="display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 15px; padding-top: 12px; border-top: 1px solid #f1f3f5;"></div>
+                    </div>
+
+                    <div style="margin-top: 30px;">
+                        <h3 style="color: #343a40; font-size: 16px; margin-bottom: 15px; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px;">📐 Rack Details</h3>
+                        <div id="contenedor-descripciones-racks" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(440px, 1fr)); gap: 18px;"></div>
+                    </div>
+                </div>
+
+                <!-- SUBTAB: MATERIALS -->
+                <div id="charts-subtab-materials" style="display: none;">
+                    <div class="card-grafica">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px; flex-wrap: wrap; gap: 10px;">
+                            <h3 style="margin: 0; border: none; padding: 0;">🧰 Available Tooling Materials (Current Stock)</h3>
+                            <div style="display: flex; gap: 10px; font-size: 11px;">
+                                <span style="display: flex; align-items: center; gap: 4px; color: #2b8a3e;"><span style="display: inline-block; width: 10px; height: 10px; background: #2b8a3e; border-radius: 2px;"></span> &gt; 10</span>
+                                <span style="display: flex; align-items: center; gap: 4px; color: #f59f00;"><span style="display: inline-block; width: 10px; height: 10px; background: #f59f00; border-radius: 2px;"></span> 1-10</span>
+                                <span style="display: flex; align-items: center; gap: 4px; color: #e30613;"><span style="display: inline-block; width: 10px; height: 10px; background: #e30613; border-radius: 2px;"></span> 0</span>
+                            </div>
+                        </div>
+                        <div class="chart-container" style="height: 380px;">
+                            <canvas id="chartMaterialsStock"></canvas>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 30px;">
+                        <h3 style="color: #343a40; font-size: 16px; margin-bottom: 15px; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px;">🧰 Material Details</h3>
+                        <div id="contenedor-descripciones-materiales" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px;"></div>
+                    </div>
                 </div>
             </main>
 
@@ -334,6 +424,12 @@
                 <div class="form-group">
                     <label>Cabinet Name:</label>
                     <input type="text" id="gabinete-nombre-input" placeholder="Ex: Cabinet 4: Harnesses" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>Description (optional):</label>
+                    <textarea id="gabinete-descripcion-input" rows="2" placeholder="Ex: Resistors, capacitors and SMD components for testing." style="resize: vertical;"></textarea>
+                    <p style="font-size: 11px; color: #6c757d; margin-top: 4px;">Short description of what this cabinet contains.</p>
                 </div>
 
                 <div class="form-group">
@@ -465,6 +561,12 @@
                 </div>
 
                 <div class="form-group">
+                    <label>Description (optional):</label>
+                    <textarea id="rack-descripcion-input" rows="2" placeholder="Ex: Coupons for FORD and VW projects." style="resize: vertical;"></textarea>
+                    <p style="font-size: 11px; color: #6c757d; margin-top: 4px;">Short description of what this rack contains.</p>
+                </div>
+
+                <div class="form-group">
                     <label>Number of Levels:</label>
                     <input type="number" id="rack-niveles-input" min="1" max="20" value="3" required>
                 </div>
@@ -485,6 +587,12 @@
                 <div class="form-group">
                     <label>Locker Name:</label>
                     <input type="text" id="locker-nombre-input" placeholder="Ex: Locker A, Locker B..." required>
+                </div>
+
+                <div class="form-group">
+                    <label>Description (optional):</label>
+                    <textarea id="locker-descripcion-input" rows="2" placeholder="Ex: Fixtures for FORD and VW projects." style="resize: vertical;"></textarea>
+                    <p style="font-size: 11px; color: #6c757d; margin-top: 4px;">Short description of what this locker contains.</p>
                 </div>
 
                 <div class="form-group">
