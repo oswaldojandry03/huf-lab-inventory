@@ -247,11 +247,24 @@ function escucharFirestore() {
     db.collection("config_gabinetes").onSnapshot((snapshot) => {
         listaEstructuraGabinetes = [];
         snapshot.forEach((doc) => { listaEstructuraGabinetes.push({ id: doc.id, ...doc.data() }); });
+        
+        // ORDENAR POR EL CAMPO 'orden'
+        listaEstructuraGabinetes.sort((a, b) => {
+            if (a.orden !== undefined && b.orden !== undefined) return a.orden - b.orden;
+            return (a.nombre || '').localeCompare(b.nombre || '');
+        });
+
         if (listaEstructuraGabinetes.length === 0) crearGabinetesPorDefecto();
         else {
             generarGabinetes();
             refrescarChartsSiEsNecesario();
         }
+    });
+
+    db.collection("layout_puntos").onSnapshot((snapshot) => {
+        puntosLayout = [];
+        snapshot.forEach((doc) => { puntosLayout.push({ id: doc.id, ...doc.data() }); });
+        renderizarPuntosLayout();
     });
 
     db.collection("gabinetes").onSnapshot((snapshot) => {
@@ -267,7 +280,11 @@ function escucharFirestore() {
         if (listaEstructuraLockers.length === 0) {
             crearLockersPorDefecto();
         } else {
-            listaEstructuraLockers.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+            // ORDENAR POR EL CAMPO 'orden'
+            listaEstructuraLockers.sort((a, b) => {
+                if (a.orden !== undefined && b.orden !== undefined) return a.orden - b.orden;
+                return (a.nombre || '').localeCompare(b.nombre || '');
+            });
             generarTarjetasLockers();
             refrescarChartsSiEsNecesario();
         }
@@ -283,6 +300,13 @@ function escucharFirestore() {
     db.collection("config_racks").onSnapshot((snapshot) => {
         listaEstructuraRacks = [];
         snapshot.forEach((doc) => { listaEstructuraRacks.push({ id: doc.id, ...doc.data() }); });
+        
+        // ORDENAR POR EL CAMPO 'orden'
+        listaEstructuraRacks.sort((a, b) => {
+            if (a.orden !== undefined && b.orden !== undefined) return a.orden - b.orden;
+            return (a.nombre || '').localeCompare(b.nombre || '');
+        });
+
         generarTarjetasRacks();
         refrescarChartsSiEsNecesario();
     });
@@ -460,6 +484,11 @@ function aplicarInterfazSesionIniciada() {
     } else {
         document.getElementById('panel-admin-nacho').style.display = 'none';
         document.getElementById('panel-admin-gabinetes').style.display = 'none';
+    }
+
+    const btnEditLayout = document.getElementById('btn-modo-edicion');
+    if (btnEditLayout) {
+        btnEditLayout.style.display = (rolActual === "SUPER_ADMIN") ? 'inline-block' : 'none';
     }
 
     const cardInv = document.getElementById('card-inventario-acceso');
@@ -1225,6 +1254,15 @@ function generarGabinetes() {
         const wrapper = document.createElement('div');
         wrapper.className = `gabinete-wrapper ${gab.esEspecial ? 'gabinete-rojo-border' : ''}`;
 
+        if (rolActual === "SUPER_ADMIN") {
+            wrapper.setAttribute('draggable', 'true');
+            wrapper.dataset.id = gab.id;
+            wrapper.dataset.tipo = 'gabinete';
+            wrapper.ondragstart = handleDragStart;
+            wrapper.ondragover = handleDragOver;
+            wrapper.ondrop = handleDrop;
+        }
+
         const divAcciones = esAdmin ? `
             <div class="acciones-gabinete-header">
                 <button class="btn-editar-pieza" onclick="openEditCabinetModal('${gab.id}')" title="Edit Cabinet">✏️ Edit</button>
@@ -1592,10 +1630,21 @@ function generarTarjetasLockers() {
 
         const card = document.createElement('div');
         card.className = 'locker-card';
+
+        if (rolActual === "SUPER_ADMIN") {
+            card.setAttribute('draggable', 'true');
+            card.dataset.id = locker.id;
+            card.dataset.tipo = 'locker';
+            card.ondragstart = handleDragStart;
+            card.ondragover = handleDragOver;
+            card.ondrop = handleDrop;
+        }
+
         card.onclick = (e) => {
             if (e.target.closest('.locker-actions')) return;
             openLockerDetail(locker.id);
         };
+
 
         const adminActions = esAdmin ? `
             <div class="locker-actions">
@@ -1726,10 +1775,13 @@ function generarContenidoLockerDetail(locker, cont) {
         } else {
             piezas.forEach((p, idx) => {
                 const imgTag = p.foto ? `<img src="${p.foto}" style="width:70px; height:70px; object-fit:cover; border-radius:6px; cursor:pointer;" onclick="enlargePhoto('${p.foto}')" title="Click to enlarge">` : '';
-                const btnAcciones = esAdmin ? `
+                const esCreador = p.creadoPor === usuarioActual;
+                const puedeEditar = esAdmin || esCreador;
+                
+                const btnAcciones = puedeEditar ? `
                     <div style="display:flex; gap:4px; margin-top:8px;">
                         <button class="btn-editar-pieza" style="background:#e9ecef; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;" onclick="openEditPieceModal('${lockerId}', ${d}, ${idx})" title="Edit Fixture">✏️</button>
-                        <button class="btn-borrar-pieza" style="background:#fff3cd; border:none; color:#e30613; padding:4px 8px; border-radius:4px; cursor:pointer; font-weight:bold;" onclick="deleteLockerPiece('${lockerId}', ${d}, ${idx})" title="Delete">&times;</button>
+                        ${esAdmin ? `<button class="btn-borrar-pieza" style="background:#fff3cd; border:none; color:#e30613; padding:4px 8px; border-radius:4px; cursor:pointer; font-weight:bold;" onclick="deleteLockerPiece('${lockerId}', ${d}, ${idx})" title="Delete">&times;</button>` : ''}
                     </div>
                 ` : '';
 
@@ -1997,24 +2049,44 @@ async function saveLockerPiece(event) {
     const part2 = document.getElementById('pieza-proj-part2').value.trim();
     const proyectoCompleto = (part1 && part2) ? `${part1}.${part2}` : '';
 
+    // VALIDACIÓN: El proyecto ahora es obligatorio siempre
+    if (!part1 || !part2 || part1.length !== 4 || part2.length !== 3) {
+        Swal.fire({ icon: 'error', title: 'Missing Project', text: 'Please enter a valid Project Number (4 digits, point, 3 digits).', confirmButtonColor: '#e30613' });
+        return;
+    }
+
     const checkMore = document.getElementById('check-more-data-options');
     const moreDataActivo = checkMore && checkMore.checked;
 
     const esNuevo = (index === "");
     const estadoActual = esNuevo ? 'Available' : (inventarioLockers[key][parseInt(index)]?.estado || 'Available');
 
-    // Datos base del fixture
+    const checkGlobal = document.getElementById('check-agregar-a-lista-global');
+    const quiereAgregarGlobal = checkGlobal && checkGlobal.checked;
+
+    // VALIDACIÓN: Si quiere global, exigir los campos de la lista global
+    if (quiereAgregarGlobal) {
+        const pais = document.getElementById('gl-pais').value.trim();
+        const planta = document.getElementById('gl-planta').value.trim();
+        if (!pais || !planta) {
+            Swal.fire({ icon: 'error', title: 'Missing data', text: 'Please fill Country and Plant to add to the Global List.', confirmButtonColor: '#e30613' });
+            return;
+        }
+    }
+
+    // Preparamos los datos del Locker
     const piezaData = {
         nombre: document.getElementById('input-pieza-nombre').value.trim(),
         cliente: document.getElementById('input-pieza-cliente').value,
         localidad: document.getElementById('input-pieza-localidad').value.trim(),
-        proyecto: proyectoCompleto || document.getElementById('input-pieza-localidad').value.trim(),
+        proyecto: proyectoCompleto, // Siempre se guarda el proyecto
         desc: document.getElementById('input-pieza-desc').value.trim(),
         foto: document.getElementById('input-pieza-foto-base64').value || '',
-        estado: estadoActual
+        estado: estadoActual,
+        creadoPor: usuarioActual
     };
 
-    // Cantidad simple (solo si NO está activo more data options)
+    // Cantidad simple
     const cantidadSimple = document.getElementById('input-pieza-cantidad').value.trim();
     if (!moreDataActivo && cantidadSimple !== '') {
         piezaData.cantidad = parseInt(cantidadSimple) || 0;
@@ -2022,11 +2094,10 @@ async function saveLockerPiece(event) {
         piezaData.cantidad = '';
     }
 
-    // Si está activo "More data options" → procesar posiciones y códigos
+    // More data options (Año, Abreviatura, Posiciones, Códigos)
     if (moreDataActivo) {
         const year = parseInt(document.getElementById('pieza-year').value) || null;
         const abrev = document.getElementById('pieza-abrev').value.trim().toUpperCase();
-
         const contenedor = document.getElementById('contenedor-posiciones-locker');
         const todasLasPosiciones = [];
         if (contenedor) {
@@ -2043,92 +2114,71 @@ async function saveLockerPiece(event) {
 
         const totalCantidad = todasLasPosiciones.reduce((sum, pos) => sum + (parseInt(pos.cantidad) || 0), 0);
         if (totalCantidad <= 0) {
-            Swal.fire({
-                icon: 'error',
-                title: 'Missing quantities',
-                text: 'Please fill at least one position with a quantity greater than 0, or uncheck "More data options".',
-                confirmButtonColor: '#e30613'
-            });
+            Swal.fire({ icon: 'error', title: 'Missing quantities', text: 'Please fill at least one position with a quantity greater than 0.', confirmButtonColor: '#e30613' });
             return;
         }
 
         const abrevsVistas = {};
         const duplicadas = [];
         todasLasPosiciones.forEach(pos => {
-            if (abrevsVistas[pos.abreviatura]) {
-                if (!duplicadas.includes(pos.abreviatura)) duplicadas.push(pos.abreviatura);
-            } else {
-                abrevsVistas[pos.abreviatura] = true;
-            }
+            if (abrevsVistas[pos.abreviatura]) { if (!duplicadas.includes(pos.abreviatura)) duplicadas.push(pos.abreviatura); } 
+            else { abrevsVistas[pos.abreviatura] = true; }
         });
         if (duplicadas.length > 0) {
-            Swal.fire({
-                icon: 'error',
-                title: 'Duplicate position abbreviations',
-                html: `The following position abbreviation(s) are duplicated:<br><strong style="color:#e30613;">${duplicadas.join(', ')}</strong><br><br>Each position must have a unique abbreviation.`,
-                confirmButtonColor: '#e30613'
-            });
+            Swal.fire({ icon: 'error', title: 'Duplicate positions', text: 'Each position must be unique.', confirmButtonColor: '#e30613' });
             return;
         }
-
-        if (!proyectoCompleto || !year || !abrev) {
-            Swal.fire({
-                icon: 'error',
-                title: 'Missing data',
-                text: 'Please fill Project Number, Year and Client Abbreviation to generate the internal codes.',
-                confirmButtonColor: '#e30613'
-            });
+        if (!year || !abrev) {
+            Swal.fire({ icon: 'error', title: 'Missing data', text: 'Fill Year and Client Abbreviation.', confirmButtonColor: '#e30613' });
             return;
         }
 
         const codigosInternos = [];
         todasLasPosiciones.forEach(pos => {
-            if (pos.cantidad > 0) {
-                codigosInternos.push({
-                    codigo: `${proyectoCompleto}-${year}-${abrev}-${pos.abreviatura}`,
-                    cantidad: pos.cantidad,
-                    posicion: pos.abreviatura
-                });
-            }
+            if (pos.cantidad > 0) codigosInternos.push({ codigo: `${proyectoCompleto}-${year}-${abrev}-${pos.abreviatura}`, cantidad: pos.cantidad, posicion: pos.abreviatura });
         });
-
-        piezaData.abreviatura = abrev;
-        piezaData.year = year;
-        piezaData.proyecto = proyectoCompleto;
+        piezaData.abreviatura = abrev; piezaData.year = year;
         piezaData.posiciones = todasLasPosiciones.filter(p => parseInt(p.cantidad) > 0);
         piezaData.codigosInternos = codigosInternos;
         piezaData.codigoInterno = codigosInternos[0]?.codigo || '';
     }
 
+    // Guardar en el Locker (Local)
     if (!inventarioLockers[key]) inventarioLockers[key] = [];
     const piezaAnterior = (index !== "" && inventarioLockers[key][parseInt(index)]) ? inventarioLockers[key][parseInt(index)] : null;
-
     if (index === "") inventarioLockers[key].push(piezaData);
     else inventarioLockers[key][parseInt(index)] = piezaData;
 
     await db.collection("lockers").doc(key).set({ items: inventarioLockers[key] });
+    await registrarModificacion('LOCKER', index === "" ? 'CREAR' : 'EDITAR', index === "" ? `Fixture "${piezaData.nombre}" added` : `Fixture "${piezaData.nombre}" edited`, piezaAnterior, piezaData, 'lockers', key);
 
-    await registrarModificacion(
-        'LOCKER',
-        index === "" ? 'CREAR' : 'EDITAR',
-        index === ""
-            ? `Fixture "${piezaData.nombre}" added to compartment ${divNum} (locker ${lockerId})`
-            : `Fixture "${piezaData.nombre}" edited in compartment ${divNum} (locker ${lockerId})`,
-        piezaAnterior, piezaData, 'lockers', key
-    );
-
-    const checkGlobal = document.getElementById('check-agregar-a-lista-global');
-    const quiereAgregarGlobal = checkGlobal && checkGlobal.checked;
+    // Guardar en la Lista Global (Si el usuario lo pidió)
+    if (quiereAgregarGlobal) {
+        const docIdGlobal = `FG_${Date.now()}`;
+        const datosGlobal = {
+            nombre: piezaData.nombre,
+            cliente: piezaData.cliente,
+            pais: document.getElementById('gl-pais').value.trim(),
+            planta: document.getElementById('gl-planta').value.trim(),
+            ubicacion: document.getElementById('gl-ubicacion').value.trim(),
+            proyecto: proyectoCompleto,
+            estado: piezaData.estado,
+            desc: piezaData.desc,
+            contactoNombre: document.getElementById('gl-contacto-nombre').value.trim(),
+            contactoInfo: document.getElementById('gl-contacto-info').value.trim(),
+            foto: piezaData.foto,
+            ultimaActualizacion: new Date().toISOString(),
+            actualizadoPor: usuarioActual || 'Anonymous',
+            origen: `Locker ${lockerId} - Div ${divNum}`
+        };
+        
+        await db.collection("lista_fixtures_global").doc(docIdGlobal).set(datosGlobal);
+        await registrarModificacion('FIXTURE_GLOBAL', 'CREAR', `Fixture "${piezaData.nombre}" also added to Global List`, null, datosGlobal, 'lista_fixtures_global', docIdGlobal);
+    }
 
     closeModal('modal-editar-pieza');
     Toast.fire({ icon: 'success', title: 'Fixture saved successfully' });
     openLockerDetail(lockerId);
-
-    if (quiereAgregarGlobal) {
-        setTimeout(() => {
-            openNewGlobalFixtureFromLocker(piezaData, lockerId, divNum);
-        }, 400);
-    }
 }
 
 async function deleteLockerPiece(lockerId, divNum, index) {
@@ -2394,6 +2444,16 @@ function generarTarjetasRacks() {
 
         const card = document.createElement('div');
         card.className = 'rack-card';
+
+        if (rolActual === "SUPER_ADMIN") {
+            card.setAttribute('draggable', 'true');
+            card.dataset.id = rack.id;
+            card.dataset.tipo = 'rack';
+            card.ondragstart = handleDragStart;
+            card.ondragover = handleDragOver;
+            card.ondrop = handleDrop;
+        }
+
         card.onclick = (e) => {
             if (e.target.closest('.rack-actions')) return;
             openRackDetail(rack.id);
@@ -2528,10 +2588,13 @@ function generarContenidoRackDetail(rack, cont) {
         } else {
             piezas.forEach((p, idx) => {
                 const imgTag = p.foto ? `<img src="${p.foto}" style="width:70px; height:70px; object-fit:cover; border-radius:6px; cursor:pointer;" onclick="enlargePhoto('${p.foto}')" title="Click to enlarge">` : '';
-                const btnAcciones = esAdmin ? `
+                const esCreador = p.creadoPor === usuarioActual;
+                const puedeEditar = esAdmin || esCreador;
+                
+                const btnAcciones = puedeEditar ? `
                     <div style="display:flex; gap:4px; margin-top:8px;">
                         <button class="btn-editar-pieza" style="background:#e9ecef; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;" onclick="openEditRackPieceModal('${rackId}', ${d}, ${idx})" title="Edit Coupon">✏️</button>
-                        <button class="btn-borrar-pieza" style="background:#fff3cd; border:none; color:#e30613; padding:4px 8px; border-radius:4px; cursor:pointer; font-weight:bold;" onclick="deleteRackPiece('${rackId}', ${d}, ${idx})" title="Delete">&times;</button>
+                        ${esAdmin ? `<button class="btn-borrar-pieza" style="background:#fff3cd; border:none; color:#e30613; padding:4px 8px; border-radius:4px; cursor:pointer; font-weight:bold;" onclick="deleteRackPiece('${rackId}', ${d}, ${idx})" title="Delete">&times;</button>` : ''}
                     </div>
                 ` : '';
 
@@ -2916,7 +2979,8 @@ async function saveRackPiece(event) {
         codigoInterno: codigosInternos[0]?.codigo || '',
         desc: document.getElementById('rack-pieza-desc').value.trim(),
         foto: document.getElementById('rack-pieza-foto-base64').value || '',
-        estado: estadoActual
+        estado: estadoActual,
+        creadoPor: usuarioActual // <-- AGREGA ESTA LÍNEA AQUÍ
     };
 
     if (!inventarioRacks[key]) inventarioRacks[key] = [];
@@ -3847,44 +3911,43 @@ async function saveGlobalFixture(event) {
         actualizadoPor: usuarioActual || 'Anonymous'
     };
 
-    // Si viene de un coupon, agregar datos del coupon
-    if (contextoFixtureGlobalDesdeCoupon) {
-        const rack = listaEstructuraRacks.find(r => r.id === contextoFixtureGlobalDesdeCoupon.rackId);
-        const rackNombre = rack ? rack.nombre : contextoFixtureGlobalDesdeCoupon.rackId;
-        datosFixture.origen = `${rackNombre} - Level ${contextoFixtureGlobalDesdeCoupon.nivelNum}`;
-        datosFixture.codigoInterno = document.getElementById('fg-codigo-interno').value;
-        datosFixture.year = parseInt(document.getElementById('fg-coupon-year').value) || null;
-        datosFixture.esCoupon = true;
-        
-        // Extraer posiciones del HTML mostrado
-        const posicionesContainer = document.getElementById('fg-coupon-posiciones');
-        const posiciones = [];
-        posicionesContainer.querySelectorAll('span').forEach(span => {
-            const texto = span.textContent; // "FL: 3"
-            const match = texto.match(/^(.+?):\s*(\d+)$/);
-            if (match) {
-                posiciones.push({ abreviatura: match[1].trim(), cantidad: parseInt(match[2]) });
-            }
-        });
-        datosFixture.posiciones = posiciones;
-    }
-
-    if (contextoFixtureGlobalDesdeLocker) {
-        const locker = listaEstructuraLockers.find(l => l.id === contextoFixtureGlobalDesdeLocker.lockerId);
-        const lockerNombre = locker ? locker.nombre : contextoFixtureGlobalDesdeLocker.lockerId;
-        datosFixture.origen = `${lockerNombre} - Div ${contextoFixtureGlobalDesdeLocker.divNum}`;
-    }
-
+    // ... (aquí va el código de coupons que ya tienes) ...
+    
     const fxAnterior = idExistente ? listaFixturesGlobales.find(f => f.firestoreId === idExistente) : null;
 
     await db.collection("lista_fixtures_global").doc(docId).set(datosFixture, { merge: true });
 
+    // --- AQUÍ VIENE LA MAGIA: SI VENÍA DE UN LOCKER, LO GUARDAMOS TAMBIÉN ---
+    if (window.datosPendientesLocker) {
+        const context = window.datosPendientesLocker;
+        const { lockerId, divNum, index, key, piezaData, estadoActual } = context;
+
+        // Actualizamos los datos de la pieza con lo que se puso en el form Global
+        piezaData.nombre = datosFixture.nombre;
+        piezaData.cliente = datosFixture.cliente;
+        piezaData.proyecto = datosFixture.proyecto;
+        piezaData.desc = datosFixture.desc;
+        
+        // Si se llenó el proyecto, generamos el código interno si no lo tiene
+        if (datosFixture.proyecto && datosFixture.proyecto.length > 3) {
+            piezaData.codigoInterno = datosFixture.proyecto;
+        }
+
+        // Guardamos en el Locker AHORA
+        if (!inventarioLockers[key]) inventarioLockers[key] = [];
+        if (index === "") inventarioLockers[key].push(piezaData);
+        else inventarioLockers[key][parseInt(index)] = piezaData;
+
+        await db.collection("lockers").doc(key).set({ items: inventarioLockers[key] });
+        
+        // Limpiamos la variable
+        window.datosPendientesLocker = null;
+    }
+
     await registrarModificacion(
         'FIXTURE_GLOBAL',
         idExistente ? 'EDITAR' : 'CREAR',
-        idExistente
-            ? `Global fixture "${datosFixture.nombre}" edited (${datosFixture.cliente})`
-            : `Fixture "${datosFixture.nombre}" added to Global List (${datosFixture.cliente} - ${datosFixture.pais})`,
+        idExistente ? `Global fixture "${datosFixture.nombre}" edited` : `Fixture "${datosFixture.nombre}" added to Global List`,
         fxAnterior, datosFixture, 'lista_fixtures_global', docId
     );
 
@@ -3892,6 +3955,16 @@ async function saveGlobalFixture(event) {
     contextoFixtureGlobalDesdeLocker = null;
     contextoFixtureGlobalDesdeCoupon = null;
     Toast.fire({ icon: 'success', title: idExistente ? 'Global fixture updated' : 'Fixture added to global list' });
+    
+    // Refrescamos la vista del locker si estábamos ahí
+    if (window.datosPendientesLocker === null && document.getElementById('modal-locker-detalle').style.display === 'block') {
+        // Solo si estábamos en un locker, recargar la vista de fondo
+        openLockerDetail(document.getElementById('pieza-locker-id').value);
+    } else {
+        // Recargar normal
+        const lockerIdActivo = document.getElementById('titulo-modal-locker-detalle')?.dataset.id;
+        if(lockerIdActivo) openLockerDetail(lockerIdActivo);
+    }
 }
 
 async function deleteGlobalFixture(firestoreId) {
@@ -5346,4 +5419,644 @@ function renderizarDescripcionesMateriales() {
         `;
         contenedor.appendChild(card);
     });
+}
+
+
+// =============================================================
+// LAYOUT MAP - PUNTOS INTERACTIVOS (V2 - Clústeres y Arrastre)
+// =============================================================
+let modoEdicionLayout = false;
+let puntosLayout = []; 
+let puntoArrastrando = null;
+let offsetX = 0, offsetY = 0;
+let mouseDownTime = 0;
+
+function toggleModoEdicion() {
+    if (rolActual !== "SUPER_ADMIN") return;
+    modoEdicionLayout = !modoEdicionLayout;
+    
+    const btn = document.getElementById('btn-modo-edicion');
+    if (modoEdicionLayout) {
+        btn.textContent = "✏️ Modo Edición: ON (Clic para Agregar / Arrastrar para Mover / Clic Der. para Borrar)";
+        btn.style.backgroundColor = "#2b8a3e";
+        document.getElementById('layout-container').style.cursor = "crosshair";
+    } else {
+        btn.textContent = "✏️ Modo Edición: OFF";
+        btn.style.backgroundColor = "#f59f00";
+        document.getElementById('layout-container').style.cursor = "default";
+    }
+    renderizarPuntosLayout();
+}
+
+// Detectar clics para agregar
+document.getElementById('layout-container')?.addEventListener('mousedown', (e) => {
+    if (!modoEdicionLayout || e.target.closest('.punto-mapa')) return;
+    mouseDownTime = Date.now();
+});
+
+document.getElementById('layout-container')?.addEventListener('mouseup', async (e) => {
+    if (!modoEdicionLayout || e.target.closest('.punto-mapa')) return;
+    
+    // Si fue un clic rápido (no un arrastre de pantalla)
+    if (Date.now() - mouseDownTime > 200) return;
+
+    const rect = document.getElementById('layout-container').getBoundingClientRect();
+    const xPorcentaje = ((e.clientX - rect.left) / rect.width) * 100;
+    const yPorcentaje = ((e.clientY - rect.top) / rect.height) * 100;
+
+    const { value: formValues } = await Swal.fire({
+        title: 'Asignar Elemento al Mapa',
+        html: `
+            <select id="swal-tipo" class="swal2-select">
+                <option value="gabinete">Gabinete</option>
+                <option value="locker">Locker</option>
+                <option value="rack">Rack</option>
+            </select>
+            <select id="swal-id" class="swal2-select"><option value="">Cargando...</option></select>
+        `,
+        didOpen: () => {
+            const tipoSelect = document.getElementById('swal-tipo');
+            const idSelect = document.getElementById('swal-id');
+            const actualizarSelect = () => {
+                const tipo = tipoSelect.value;
+                idSelect.innerHTML = '';
+                if (tipo === 'gabinete') listaEstructuraGabinetes.forEach(g => idSelect.innerHTML += `<option value="${g.id}">${g.nombre}</option>`);
+                else if (tipo === 'locker') listaEstructuraLockers.forEach(l => idSelect.innerHTML += `<option value="${l.id}">${l.nombre}</option>`);
+                else listaEstructuraRacks.forEach(r => idSelect.innerHTML += `<option value="${r.id}">${r.nombre}</option>`);
+            };
+            tipoSelect.addEventListener('change', actualizarSelect);
+            actualizarSelect();
+        },
+        showCancelButton: true, confirmButtonText: 'Guardar', confirmButtonColor: '#e30613',
+        preConfirm: () => ({ tipo: document.getElementById('swal-tipo').value, refId: document.getElementById('swal-id').value })
+    });
+
+    if (formValues && formValues.refId) {
+        await db.collection("layout_puntos").add({
+            tipo: formValues.tipo, refId: formValues.refId, x: xPorcentaje, y: yPorcentaje
+        });
+        Toast.fire({ icon: 'success', title: 'Punto guardado' });
+    }
+});
+
+// Dibujar puntos y agruparlos
+function renderizarPuntosLayout() {
+    const capa = document.getElementById('capa-puntos');
+    if (!capa) return;
+    capa.innerHTML = '';
+
+    const grupos = [];
+    puntosLayout.forEach(punto => {
+        let encontrado = false;
+        for (let grupo of grupos) {
+            const distX = Math.abs(grupo[0].x - punto.x);
+            const distY = Math.abs(grupo[0].y - punto.y);
+            if (distX < 0.8 && distY < 0.8) { 
+                grupo.push(punto);
+                encontrado = true;
+                break;
+            }
+        }
+        if (!encontrado) grupos.push([punto]);
+    });
+
+    grupos.forEach(grupo => {
+        const p = grupo[0]; 
+        const isCluster = grupo.length > 1;
+        
+        let color = '#adb5bd';
+        if (p.tipo === 'gabinete') color = '#e30613';
+        else if (p.tipo === 'locker') color = '#343a40';
+        else if (p.tipo === 'rack') color = '#862e9c';
+
+        // Obtener el nombre para el tooltip
+        let tooltipText = 'Desconocido';
+        if (p.tipo === 'gabinete') {
+            const g = listaEstructuraGabinetes.find(x => x.id === p.refId);
+            if (g) tooltipText = g.nombre;
+        } else if (p.tipo === 'locker') {
+            const l = listaEstructuraLockers.find(x => x.id === p.refId);
+            if (l) tooltipText = l.nombre;
+        } else if (p.tipo === 'rack') {
+            const r = listaEstructuraRacks.find(x => x.id === p.refId);
+            if (r) tooltipText = r.nombre;
+        }
+
+        const div = document.createElement('div');
+        div.className = 'punto-mapa';
+        div.id = `punto-${grupo.map(g => g.id).join('-')}`; 
+        div.style.cssText = `
+            position: absolute; 
+            left: ${p.x}%; top: ${p.y}%; 
+            transform: translate(-50%, -50%); 
+            width: 14px; height: 14px; 
+            background: ${color}; 
+            border: 2px solid white; 
+            border-radius: 50%; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.6);
+            pointer-events: auto;
+            cursor: ${modoEdicionLayout ? 'grab' : 'pointer'};
+            z-index: 10;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 10px; font-weight: bold;
+            transition: all 0.3s ease;
+        `;
+
+        if (isCluster) {
+            div.textContent = grupo.length;
+            div.style.width = '20px'; div.style.height = '20px';
+            div.style.borderColor = '#f59f00';
+            
+            // AQUÍ ESTÁ EL CAMBIO: Junta los nombres de todos los elementos del grupo
+            tooltipText = grupo.map(g => {
+                if (g.tipo === 'gabinete') {
+                    const item = listaEstructuraGabinetes.find(x => x.id === g.refId);
+                    return item ? item.nombre : '';
+                }
+                if (g.tipo === 'locker') {
+                    const item = listaEstructuraLockers.find(x => x.id === g.refId);
+                    return item ? item.nombre : '';
+                }
+                if (g.tipo === 'rack') {
+                    const item = listaEstructuraRacks.find(x => x.id === g.refId);
+                    return item ? item.nombre : '';
+                }
+                return '';
+            }).filter(n => n !== '').join(' | '); // Los separa con una línea vertical
+        }
+
+        if (!modoEdicionLayout) {
+            const tooltip = document.createElement('div');
+            const estaArriba = p.y < 10; 
+            const posicionY = estaArriba ? 'top: 25px;' : 'bottom: 25px;';
+
+            tooltip.style.cssText = `
+                position: absolute; ${posicionY} left: 50%; transform: translateX(-50%);
+                background: #1a1d20; color: white; padding: 6px 10px; border-radius: 4px;
+                font-size: 11px; white-space: nowrap; pointer-events: none;
+                opacity: 0; transition: opacity 0.2s; z-index: 99999;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            `;
+            tooltip.innerHTML = `<strong>${tooltipText}</strong>`;
+            
+            div.onmouseenter = () => tooltip.style.opacity = '1';
+            div.onmouseleave = () => tooltip.style.opacity = '0';
+            div.appendChild(tooltip);
+
+            div.onclick = (e) => {
+                e.stopPropagation();
+                mostrarInfoPuntos(grupo);
+            };
+        } else {
+            // ... (El código de arrastrar se queda igual)
+            div.onmousedown = (e) => {
+                if (e.button === 2) return; 
+                puntoArrastrando = { grupo, element: div };
+                div.style.cursor = 'grabbing';
+                div.style.zIndex = 100;
+                
+                const rect = document.getElementById('layout-container').getBoundingClientRect();
+                offsetX = e.clientX - rect.left - (rect.width * (p.x / 100));
+                offsetY = e.clientY - rect.top - (rect.height * (p.y / 100));
+            };
+
+            div.oncontextmenu = async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const res = await Swal.fire({ 
+                    title: '¿Eliminar punto(s)?', 
+                    text: isCluster ? `Se eliminarán ${grupo.length} elementos.` : 'Se eliminará este elemento.',
+                    icon: 'warning', showCancelButton: true, confirmButtonColor: '#e30613' 
+                });
+                if (res.isConfirmed) {
+                    const batch = db.batch();
+                    grupo.forEach(item => batch.delete(db.collection("layout_puntos").doc(item.id)));
+                    await batch.commit();
+                }
+            };
+        }
+        capa.appendChild(div);
+    });
+}
+
+// Lógica para mover el punto con el mouse
+document.addEventListener('mousemove', (e) => {
+    if (!puntoArrastrando) return;
+    const container = document.getElementById('layout-container');
+    const rect = container.getBoundingClientRect();
+    
+    let newX = e.clientX - rect.left - offsetX;
+    let newY = e.clientY - rect.top - offsetY;
+
+    // Convertir a porcentaje
+    let xPorcentaje = (newX / rect.width) * 100;
+    let yPorcentaje = (newY / rect.height) * 100;
+    
+    // Limitar bordes
+    xPorcentaje = Math.max(0, Math.min(100, xPorcentaje));
+    yPorcentaje = Math.max(0, Math.min(100, yPorcentaje));
+
+    puntoArrastrando.element.style.left = `${xPorcentaje}%`;
+    puntoArrastrando.element.style.top = `${yPorcentaje}%`;
+    
+    puntoArrastrando.newX = xPorcentaje;
+    puntoArrastrando.newY = yPorcentaje;
+});
+
+document.addEventListener('mouseup', async () => {
+    if (puntoArrastrando) {
+        // Guardar nueva posición en Firebase para todos los del grupo
+        const batch = db.batch();
+        puntoArrastrando.grupo.forEach(item => {
+            batch.update(db.collection("layout_puntos").doc(item.id), {
+                x: puntoArrastrando.newX, y: puntoArrastrando.newY
+            });
+        });
+        await batch.commit();
+        
+        puntoArrastrando.element.style.zIndex = 10;
+        puntoArrastrando.element.style.cursor = 'grab';
+        puntoArrastrando = null;
+    }
+});
+
+// Mostrar la ventana con la info al hacer clic (Modo Normal)
+async function mostrarInfoPuntos(grupo) {
+    let html = '<div style="display: flex; flex-direction: column; gap: 10px;">';
+    
+    grupo.forEach(p => {
+        let nombre = 'Desconocido', desc = '', foto = '';
+        if (p.tipo === 'gabinete') {
+            const g = listaEstructuraGabinetes.find(x => x.id === p.refId);
+            if (g) { nombre = g.nombre; desc = g.descripcion || 'Sin descripción'; }
+        } else if (p.tipo === 'locker') {
+            const l = listaEstructuraLockers.find(x => x.id === p.refId);
+            if (l) { nombre = l.nombre; desc = l.descripcion || 'Sin descripción'; }
+        } else if (p.tipo === 'rack') {
+            const r = listaEstructuraRacks.find(x => x.id === p.refId);
+            if (r) { nombre = r.nombre; desc = r.descripcion || 'Sin descripción'; }
+        }
+
+        html += `
+            <div style="background: #f8f9fa; padding: 10px; border-radius: 6px; border-left: 4px solid #e30613; text-align: left;">
+                <h4 style="margin: 0 0 5px 0; color: #212529; font-size: 14px;">${nombre}</h4>
+                <p style="margin: 0; font-size: 12px; color: #6c757d;">${desc}</p>
+                <!-- Aquí podrías agregar la foto si la tienes -->
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    Swal.fire({ title: 'Información del Elemento', html: html, confirmButtonText: 'Cerrar', confirmButtonColor: '#e30613' });
+}
+
+// --- BUSCADOR EN EL LAYOUT ---
+function buscarEnLayout(event) {
+    event.preventDefault();
+    const termino = document.getElementById('buscar-layout').value.toLowerCase().trim();
+    if (!termino) return limpiarBusquedaLayout();
+
+    let puntosEncontrados = [];
+
+    // 1. Buscar en Gabinetes
+    for (const key in inventarioGabinetes) {
+        const info = inventarioGabinetes[key];
+        if (info.nombre && info.nombre.toLowerCase().includes(termino)) {
+            const gabId = key.split('-')[0]; // Sacar ID del gabinete (ej. G1)
+            const punto = puntosLayout.find(p => p.refId === gabId && p.tipo === 'gabinete');
+            if (punto) puntosEncontrados.push(punto);
+        }
+    }
+
+    // 2. Buscar en Lockers
+    for (const key in inventarioLockers) {
+        const piezas = inventarioLockers[key] || [];
+        piezas.forEach(p => {
+            const textoCompleto = `${p.nombre} ${p.cliente} ${p.desc}`.toLowerCase();
+            if (textoCompleto.includes(termino)) {
+                const lockerId = key.split('-')[0]; 
+                const punto = puntosLayout.find(pt => pt.refId === lockerId && pt.tipo === 'locker');
+                if (punto && !puntosEncontrados.find(pe => pe.id === punto.id)) puntosEncontrados.push(punto);
+            }
+        });
+    }
+
+    // 3. Buscar en Racks/Coupons
+    for (const key in inventarioRacks) {
+        const piezas = inventarioRacks[key] || [];
+        piezas.forEach(p => {
+            const textoCompleto = `${p.nombre} ${p.cliente} ${p.desc} ${(p.codigosInternos || []).map(c => c.codigo).join(' ')}`.toLowerCase();
+            if (textoCompleto.includes(termino)) {
+                const rackId = key.split('-')[0]; 
+                const punto = puntosLayout.find(pt => pt.refId === rackId && pt.tipo === 'rack');
+                if (punto && !puntosEncontrados.find(pe => pe.id === punto.id)) puntosEncontrados.push(punto);
+            }
+        });
+    }
+
+    // Hacer brillar los puntos encontrados
+    limpiarBusquedaLayout(false); // Limpiar brillos anteriores
+    if (puntosEncontrados.length > 0) {
+        puntosEncontrados.forEach(punto => {
+            // Buscamos el div del punto en el mapa y le cambiamos el color temporalmente
+            const elementosMapa = document.querySelectorAll('.punto-mapa');
+            elementosMapa.forEach(el => {
+                // Verificamos si el ID del punto contiene el ID que buscamos
+                if (el.id.includes(punto.id)) {
+                    el.style.backgroundColor = '#00ff66'; // Verde brillante
+                    el.style.boxShadow = '0 0 15px #00ff66';
+                    el.style.zIndex = 99;
+                    el.classList.add('punto-brillante');
+                }
+            });
+        });
+        Toast.fire({ icon: 'success', title: `Se encontraron ${puntosEncontrados.length} ubicaciones` });
+    } else {
+        Swal.fire({ icon: 'info', title: 'No encontrado', text: 'No se encontraron componentes con ese nombre en el mapa.', confirmButtonColor: '#e30613' });
+    }
+}
+
+function limpiarBusquedaLayout(borrarTexto = true) {
+    if (borrarTexto) document.getElementById('buscar-layout').value = '';
+    
+    // Quitar el brillo a todos los puntos
+    document.querySelectorAll('.punto-mapa').forEach(el => {
+        el.style.backgroundColor = ''; // Vuelve a su color original (por CSS o por el estilo en línea)
+        el.style.boxShadow = '';
+        el.style.zIndex = 10;
+        el.classList.remove('punto-brillante');
+    });
+    
+    // Llamamos a renderizar para que se dibujen de nuevo con sus colores originales
+    renderizarPuntosLayout(); 
+}
+
+// --- VENTANA DE INFORMACIÓN (CLIC EN PUNTO) ---
+function mostrarInfoPuntos(grupo) {
+    let html = '<div style="display: flex; flex-direction: column; gap: 15px; text-align: left;">';
+    
+    grupo.forEach(p => {
+        let nombre = 'Desconocido', desc = '', foto = '', tipoLabel = '';
+        
+        if (p.tipo === 'gabinete') {
+            const g = listaEstructuraGabinetes.find(x => x.id === p.refId);
+            if (g) { 
+                nombre = g.nombre; 
+                desc = g.descripcion || 'Sin descripción'; 
+                // Si en un futuro agregas fotos a los gabinetes, irían aquí
+                tipoLabel = '🗄️ Gabinete';
+            }
+        } else if (p.tipo === 'locker') {
+            const l = listaEstructuraLockers.find(x => x.id === p.refId);
+            if (l) { nombre = l.nombre; desc = l.descripcion || 'Sin descripción'; tipoLabel = '🔒 Locker'; }
+        } else if (p.tipo === 'rack') {
+            const r = listaEstructuraRacks.find(x => x.id === p.refId);
+            if (r) { nombre = r.nombre; desc = r.descripcion || 'Sin descripción'; tipoLabel = '📐 Rack'; }
+        }
+
+        html += `
+            <div style="background: #f8f9fa; padding: 12px; border-radius: 8px; border-left: 4px solid #e30613; display: flex; gap: 15px; align-items: center;">
+                <div style="flex: 1;">
+                    <span style="font-size: 11px; color: #6c757d; font-weight: bold; text-transform: uppercase;">${tipoLabel}</span>
+                    <h4 style="margin: 4px 0 6px 0; color: #212529; font-size: 16px;">${nombre}</h4>
+                    <p style="margin: 0; font-size: 13px; color: #495057;">${desc}</p>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    Swal.fire({ 
+        title: 'Información del Elemento', 
+        html: html, 
+        confirmButtonText: 'Cerrar', 
+        confirmButtonColor: '#e30613',
+        width: '600px'
+    });
+}
+
+function toggleDatosGlobalesLocker() {
+    const check = document.getElementById('check-agregar-a-lista-global');
+    const seccion = document.getElementById('seccion-global-locker');
+    if (check && seccion) {
+        seccion.style.display = check.checked ? 'block' : 'none';
+    }
+}
+
+// =============================================================
+// CERRAR MODALES CON LA TECLA ESC
+// =============================================================
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' || e.key === 'Esc') {
+        // Buscar todos los modales abiertos
+        const modalesAbiertos = document.querySelectorAll('.modal');
+        modalesAbiertos.forEach(modal => {
+            if (modal.style.display === 'block') {
+                modal.style.display = 'none';
+            }
+        });
+    }
+});
+
+// =============================================================
+// REORDENAR ELEMENTOS (SOLO MASTER)
+// =============================================================
+async function moverElemento(tipo, id, direccion) {
+    if (rolActual !== "SUPER_ADMIN") {
+        Swal.fire({ icon: 'error', title: 'Access denied', text: 'Only the Master can reorder items.', confirmButtonColor: '#e30613' });
+        return;
+    }
+
+    let lista, coleccion;
+    if (tipo === 'gabinete') {
+        lista = [...listaEstructuraGabinetes];
+        coleccion = 'config_gabinetes';
+    } else if (tipo === 'locker') {
+        lista = [...listaEstructuraLockers];
+        coleccion = 'config_lockers';
+    } else if (tipo === 'rack') {
+        lista = [...listaEstructuraRacks];
+        coleccion = 'config_racks';
+    } else {
+        return;
+    }
+
+    // Asegurarnos de que todos tengan un orden asignado (por si son datos viejos)
+    lista.forEach((item, index) => {
+        if (item.orden === undefined || item.orden === null) {
+            item.orden = index;
+        }
+    });
+
+    // Ordenar la lista actual por el campo 'orden' (o por nombre si no tienen)
+    lista.sort((a, b) => {
+        if (a.orden !== undefined && b.orden !== undefined) return a.orden - b.orden;
+        return (a.nombre || '').localeCompare(b.nombre || '');
+    });
+
+    const indexActual = lista.findIndex(item => item.id === id);
+    if (indexActual === -1) return;
+
+    const nuevoIndex = indexActual + direccion;
+    if (nuevoIndex < 0 || nuevoIndex >= lista.length) return; // Ya está en el borde
+
+    // Intercambiar en el arreglo
+    const elementoA = lista[indexActual];
+    const elementoB = lista[nuevoIndex];
+    
+    const tempOrden = elementoA.orden;
+    elementoA.orden = elementoB.orden;
+    elementoB.orden = tempOrden;
+
+    // Guardar en Firebase los dos elementos afectados
+    const batch = db.batch();
+    const refA = db.collection(coleccion).doc(elementoA.id);
+    const refB = db.collection(coleccion).doc(elementoB.id);
+    
+    batch.update(refA, { orden: elementoA.orden });
+    batch.update(refB, { orden: elementoB.orden });
+
+    try {
+        await batch.commit();
+        // El listener de Firebase actualizará la UI automáticamente
+        Toast.fire({ icon: 'success', title: 'Order updated' });
+    } catch (error) {
+        console.error("Error al reordenar:", error);
+        Swal.fire({ icon: 'error', title: 'Error', text: 'Could not update the order.', confirmButtonColor: '#e30613' });
+    }
+}
+
+// =============================================================
+// DRAG & DROP PARA REORDENAR (SOLO MASTER)
+// =============================================================
+// =============================================================
+// DRAG & DROP PARA REORDENAR (SOLO MASTER)
+// =============================================================
+let elementoArrastrado = null;
+
+function handleDragStart(e) {
+    if (rolActual !== "SUPER_ADMIN") return;
+    elementoArrastrado = e.currentTarget;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', e.currentTarget.dataset.id);
+    setTimeout(() => { e.currentTarget.style.opacity = '0.4'; }, 0);
+}
+
+function handleDragOver(e) {
+    if (rolActual !== "SUPER_ADMIN") return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    
+    const target = e.currentTarget;
+    if (target !== elementoArrastrado && target.dataset.tipo === elementoArrastrado.dataset.tipo) {
+        target.style.border = "3px dashed #e30613";
+    }
+}
+
+async function handleDrop(e) {
+    e.preventDefault();
+    if (rolActual !== "SUPER_ADMIN") return;
+    
+    const target = e.currentTarget;
+    target.style.border = ""; // Quitar borde de drop
+    
+    if (elementoArrastrado && target !== elementoArrastrado && target.dataset.tipo === elementoArrastrado.dataset.tipo) {
+        const idArrastrado = elementoArrastrado.dataset.id;
+        const idTarget = target.dataset.id;
+        const tipo = target.dataset.tipo;
+
+        // 1. Determinar qué lista estamos usando
+        let lista = [];
+        let coleccion = '';
+        if (tipo === 'gabinete') { lista = [...listaEstructuraGabinetes]; coleccion = 'config_gabinetes'; }
+        else if (tipo === 'locker') { lista = [...listaEstructuraLockers]; coleccion = 'config_lockers'; }
+        else if (tipo === 'rack') { lista = [...listaEstructuraRacks]; coleccion = 'config_racks'; }
+        else return;
+
+        // 2. Asegurarnos de que todos tengan orden inicial
+        lista.forEach((item, index) => {
+            if (item.orden === undefined || item.orden === null) item.orden = index;
+        });
+
+        // 3. Ordenar la lista temporal para saber dónde estamos parados
+        lista.sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
+
+        // 4. Encontrar índices
+        const indexArrastrado = lista.findIndex(x => x.id === idArrastrado);
+        const indexTarget = lista.findIndex(x => x.id === idTarget);
+
+        if (indexArrastrado === -1 || indexTarget === -1) return;
+
+        // 5. Mover el elemento en el arreglo
+        const [elementoMovido] = lista.splice(indexArrastrado, 1);
+        lista.splice(indexTarget, 0, elementoMovido);
+
+        // 6. Reasignar el nuevo orden numérico a TODOS y guardar
+        try {
+            const batch = db.batch();
+            lista.forEach((item, index) => {
+                const ref = db.collection(coleccion).doc(item.id);
+                // Usamos {merge: true} para no borrar los otros datos del documento
+                batch.set(ref, { orden: index }, { merge: true });
+            });
+            await batch.commit();
+            Toast.fire({ icon: 'success', title: 'Order updated successfully' });
+        } catch (error) {
+            console.error("Error al guardar orden:", error);
+            Swal.fire({ icon: 'error', title: 'Error', text: 'Could not save the new order.' });
+        }
+    }
+    
+    if (elementoArrastrado) {
+        elementoArrastrado.style.opacity = '1';
+        elementoArrastrado = null;
+    }
+}
+// Limpiar el estilo de borde cuando el mouse sale
+document.addEventListener('dragleave', (e) => {
+    if (e.target.classList && e.target.classList.contains('gabinete-wrapper')) e.target.style.border = "";
+    if (e.target.classList && e.target.classList.contains('locker-card')) e.target.style.border = "";
+    if (e.target.classList && e.target.classList.contains('rack-card')) e.target.style.border = "";
+});
+
+document.addEventListener('dragend', (e) => {
+    if (e.target.classList && e.target.classList.contains('gabinete-wrapper')) e.target.style.border = "";
+    if (e.target.classList && e.target.classList.contains('locker-card')) e.target.style.border = "";
+    if (e.target.classList && e.target.classList.contains('rack-card')) e.target.style.border = "";
+});
+
+function irAlMapa(tipo, refId) {
+    // Cambiar a la pestaña Layout
+    const btnLayout = document.querySelector('.btn-tab[onclick*="tab-layout"]');
+    if (btnLayout) btnLayout.click();
+
+    // Esperar un momento a que la pestaña se dibuje y buscar el punto
+    setTimeout(() => {
+        // Buscar el punto en el mapa que coincida con el tipo y refId
+        const puntosEnMapa = document.querySelectorAll('.punto-mapa');
+        let encontrado = false;
+        
+        puntosEnMapa.forEach(el => {
+            if (el.id.includes(refId)) {
+                // Hacerlo brillar
+                el.style.backgroundColor = '#00ff66';
+                el.style.boxShadow = '0 0 20px #00ff66';
+                el.style.zIndex = '999';
+                el.style.transform = 'translate(-50%, -50%) scale(1.5)';
+                encontrado = true;
+                
+                // Quitar el brillo después de 3 segundos
+                setTimeout(() => {
+                    el.style.backgroundColor = '';
+                    el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.6)';
+                    el.style.zIndex = '10';
+                    el.style.transform = 'translate(-50%, -50%) scale(1)';
+                }, 3000);
+            }
+        });
+
+        if (!encontrado) {
+            Swal.fire({ icon: 'info', title: 'Not in map', text: 'This item has not been placed on the map yet.', confirmButtonColor: '#e30613' });
+        }
+    }, 500);
 }
